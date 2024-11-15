@@ -1,0 +1,20 @@
+---------------------------------------------------------------------------------
+Done
+---------------------------------------------------------------------------------
+Player movement is a bit janky, Fix it
+The camera positioning is still not working well, Fix it
+The mouse control is still cursed you need to fix it
+Update the movement of the camera to be better suited to moving fast
+Find a way to combine lists
+Find a way to make astroids collide with every thing in the world that moves
+Create a custom particle system
+Make the thrusters particles
+Find a way to make the player collide with planets and get destroyed
+---------------------------------------------------------------------------------
+Not Done
+---------------------------------------------------------------------------------
+Make the game multiplayer compatible
+Make a mechanic for procedurally generated enemies and astroids and planets
+Find a way to make planets collide and get destroyed
+Add reverse thrusters particle effects
+Make the player a bit more dynamic, make hm able to land on a planet manually, come out of his ship, explore the planet and be chased by enemies on the planet

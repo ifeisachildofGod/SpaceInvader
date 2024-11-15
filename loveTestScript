@@ -1,0 +1,13 @@
+return {
+    graphics = {
+        newFont = function (value)
+            
+        end,
+        getWidth = function ()
+            return 20
+        end,
+        getHeight = function ()
+            return 10
+        end
+    }
+}
