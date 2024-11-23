@@ -14,15 +14,13 @@ local function Rammer(x, y, radius, player, accuracy)
     local enemy = Player(x, y, radius)
 
     enemy.player = player
-    enemy.speed = 0
 
-    enemy.inacurateAngleChangeVel = 0.001
-
-    enemy.ACCEL_SPEED = 0.0009
+    enemy.TURN_SPEED = 2
+    enemy.ACCEL_SPEED = 1
+    
+    enemy.forwardThrusterParticles:setScale(4)
 
     enemy.update = function (self)
-        self:updatePlayerWordlProxy()
-
         if not self.player.exploding and not self.exploding then
             local dx = self.player.x - self.x
             local dy = self.y - self.player.y
@@ -37,15 +35,14 @@ local function Rammer(x, y, radius, player, accuracy)
             ---@diagnostic disable-next-line: deprecated
             angle = math.deg(math.atan2(newDY, newDX)) - 90
             
-            self.angle = self.angle + (angle - self.angle) * (self.inacurateAngleChangeVel + (1 - self.inacurateAngleChangeVel) * accuracy)
-            self.angle = self.angle % 360
+            self.angle = CalculateAngleLerp(self.angle, angle, self.TURN_SPEED)
+            
+            self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * (self.forwardThruster.deccel + 1) * self.forwardThruster.accel
+            self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * (self.forwardThruster.deccel + 1) * self.forwardThruster.accel
+            
+            self.thrust.x = Clamp(self.thrust.x + self.forwardThruster.x, -self.MAX_SPEED, self.MAX_SPEED)
+            self.thrust.y = Clamp(self.thrust.y + self.forwardThruster.y, -self.MAX_SPEED, self.MAX_SPEED)
 
-            self.speed = math.min(self.speed + self.ACCEL_SPEED, self.MAX_SPEED)
-            
-            self.thrust.x = self.speed * math.cos(math.rad(self.angle + 90)) / DT
-            self.thrust.y = -self.speed * math.sin(math.rad(self.angle + 90)) / DT
-            
-            self:movePlayer()
             if CalculateDistance(self.x, self.y, self.player.x, self.player.y) < self.player.radius then
                 self:explode()
                 self.player:explode()
@@ -57,8 +54,13 @@ local function Rammer(x, y, radius, player, accuracy)
                     table.remove(self.player.bullets, index)
                 end
             end
-            
         end
+        
+        self:updatePlayerWorldProxy()
+        self:movePlayer()
+        self:updateParticles()
+        self:updateBullets()
+        self:updateExplosionProcedures()
     end
 
     return enemy
@@ -69,14 +71,13 @@ local function Turett(x, y, radius, player)
     local enemy = Player(x, y, radius, true)
     
     enemy.player = player
-    enemy.TURN_SPEED = 0.01
+    enemy.TURN_SPEED = 0.05
     enemy.MAX_BULLETS_AMT = tonumber(enemy.MAX_BULLETS_AMT / 3)
     enemy.ACCEL_SPEED = enemy.ACCEL_SPEED / 4
     enemy.MAX_SPEED = (enemy.MAX_SPEED / 4) - 5
     enemy.SHOT_RANGE_ANGLE = 45
 
     enemy.update = function (self)
-        self:updatePlayerWordlProxy()
         if not self.player.exploding and not self.exploding then
             self:movePlayer(worldDirection)
             local dx = self.player.x - self.x
@@ -84,14 +85,13 @@ local function Turett(x, y, radius, player)
 
             ---@diagnostic disable-next-line: deprecated
             local angle = (math.deg(math.atan2(dy,dx)) - 90) % 360
-            self.angle = self.angle + ((angle - self.angle) * self.TURN_SPEED)
+            self.angle = CalculateAngleLerp(self.angle, angle, self.TURN_SPEED)
+            
             if angle - self.SHOT_RANGE_ANGLE < self.angle and self.angle < angle + self.SHOT_RANGE_ANGLE then
                 self:addBullet()
             end
             
         end
-
-        self:updateBullets()
 
         for index, bullet in ipairs(self.bullets) do
             if CalculateDistance(bullet.x, bullet.y, self.player.x, self.player.y) < self.player.radius then
@@ -106,6 +106,11 @@ local function Turett(x, y, radius, player)
                 table.remove(self.player.bullets, index)
             end
         end
+        
+        self:updatePlayerWorldProxy()
+        self:updateParticles()
+        self:updateBullets()
+        self:updateExplosionProcedures()
     end
 
     return enemy

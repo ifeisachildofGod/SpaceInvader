@@ -5,9 +5,11 @@ local World = require 'world'
 local world = World()
 
 LOGGER = Logger()
+LOGGER:setLogPath(LOGGER.loggerFilePath)
 DT = 0
 
 function love.load()
+    
     love.graphics.setFont(Fonts['p'])
     LOGGER:clearFile()
     LOGGER:log('[Running] Love "'..debug.getinfo(1).source..'"')

@@ -1,10 +1,13 @@
 
-local function Planet(x, y, color, radius, astroBodies)
+local function Planet(x, y, color, radius, astroBodies, massConstant)
     local astroBodiesRef = astroBodies
+    local MASS_CONSTANT = massConstant or 0.00000000000000000000000000000000001
+    
     return {
         x = x,
         y = y,
         radius = radius,
+        mass = radius * MASS_CONSTANT,
         astroBodies = astroBodiesRef,
         thrust = {x = 0, y = 0},
         color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
@@ -15,32 +18,31 @@ local function Planet(x, y, color, radius, astroBodies)
         end,
 
         applyPhysics = function (self)
-            local dt = love.timer.getDelta()
-
             for _, body in ipairs(self.astroBodies) do
-                if CalculateDistance(self.x, self.y, body.x, body.y) <= self.radius^3 and body ~= self then
-                    local bodyFx, bodyFy =  CalculateTwoBodyVextor(self, body)
-                    local myFx, myFy =  CalculateTwoBodyVextor(body, self)
+                if CalculateDistance(self.x, self.y, body.x, body.y) <= self.radius^2 and body ~= self then
+                    self.thrust.x, self.thrust.y, body.thrust.x, body.thrust.y = CalculateTwoBodyThrust(self, body)
                     
-                    self.thrust.x = self.thrust.x + myFx
-                    self.thrust.y = self.thrust.y + myFy
-    
-                    self.x = self.x + self.thrust.x * dt
-                    self.y = self.y + self.thrust.y * dt
+                    self.x = self.x + self.thrust.x * DT
+                    self.y = self.y + self.thrust.y * DT
                     
-                    body.thrust.x = body.thrust.x + bodyFx
-                    body.thrust.y = body.thrust.y + bodyFy
-
-                    body.x = body.x + body.thrust.x * dt
-                    body.y = body.y + body.thrust.y * dt
+                    if body.docked ~= nil then
+                        body.x = body.x + body.thrust.x * DT
+                        body.y = body.y + body.thrust.y * DT
+                    else
+                        if not body.docked then
+                            body.x = body.x + body.thrust.x * DT
+                            body.y = body.y + body.thrust.y * DT
+                        end
+                    end
                 end
             end
         end,
 
         update = function (self)
+            self:applyPhysics()
             self.x = self.x + worldDirection.x
             self.y = self.y + worldDirection.y
-            self:applyPhysics()
+            self.mass = self.radius * MASS_CONSTANT
         end
 
 
