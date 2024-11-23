@@ -1,4 +1,55 @@
 
+function Planet(x, y, color, radius, astroBodies, massConstant)
+    local astroBodiesRef = astroBodies
+    local MASS_CONSTANT = massConstant or 0.00000000000000000000000000000000001
+    
+    return {
+        x = x,
+        y = y,
+        radius = radius,
+        mass = radius * MASS_CONSTANT,
+        astroBodies = astroBodiesRef,
+        thrust = {x = 0, y = 0},
+        color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
+        
+        draw = function (self)
+            love.graphics.setColor(self.color.r, self.color.g, self.color.b)
+            love.graphics.circle('fill', self.x, self.y, self.radius)
+        end,
+
+        applyPhysics = function (self)
+            for _, body in ipairs(self.astroBodies) do
+                if CalculateDistance(self.x, self.y, body.x, body.y) <= self.radius^2 and body ~= self then
+                    self.thrust.x, self.thrust.y, body.thrust.x, body.thrust.y = CalculateTwoBodyThrust(self, body)
+                    
+                    self.x = self.x + self.thrust.x * DT
+                    self.y = self.y + self.thrust.y * DT
+                    
+                    if body.docked ~= nil then
+                        body.x = body.x + body.thrust.x * DT
+                        body.y = body.y + body.thrust.y * DT
+                    else
+                        if not body.docked then
+                            body.x = body.x + body.thrust.x * DT
+                            body.y = body.y + body.thrust.y * DT
+                        end
+                    end
+                end
+            end
+        end,
+
+        update = function (self)
+            self:applyPhysics()
+            self.x = self.x + WorldDirection.x
+            self.y = self.y + WorldDirection.y
+            self.mass = self.radius * MASS_CONSTANT
+        end
+
+
+    }
+end
+
+
 ---comment
 ---@param x number
 ---@param y number
@@ -12,7 +63,7 @@
 ---@param world table
 ---@param angle? number
 ---@return table
-local function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, velRange, astroidAmt, world, angle)
+function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, velRange, astroidAmt, world, angle)
     local VELOCITY = math.random(velRange)
     local MASS_CONSTANT = 0.05
 
@@ -44,8 +95,8 @@ local function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, vel
         explode = function (self)
             self.destroyed = true
 
-            local astroidsIndex = ListIndex(self.world.asteroidTbl, self)
-            local charactersIndex = ListIndex(self.world.characters, self)
+            local astroidsIndex = CalculateListIndex(self.world.asteroids, self)
+            local charactersIndex = CalculateListIndex(self.world.collisionBodies, self)
 
             if astroidsIndex < 0 or charactersIndex < 0 then
                 error('This astroid is somehow not in the list you messed up. Character index is '..charactersIndex..'. Astroid index is '..astroidsIndex)
@@ -72,13 +123,13 @@ local function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, vel
                                             self.world,
                                             newAngle)
                     
-                    table.insert(self.world.asteroidTbl, astroid)
-                    table.insert(self.world.characters, astroid)
+                    table.insert(self.world.asteroids, astroid)
+                    table.insert(self.world.collisionBodies, astroid)
                 end
             end
             
-            table.remove(self.world.characters, charactersIndex)
-            table.remove(self.world.asteroidTbl, astroidsIndex)
+            table.remove(self.world.collisionBodies, charactersIndex)
+            table.remove(self.world.asteroids, astroidsIndex)
         end,
         
         draw = function (self)
@@ -96,8 +147,8 @@ local function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, vel
         end,
 
         update = function (self)
-            self.x = worldDirection.x + self.x + self.thrust.x * DT
-            self.y = worldDirection.y + self.y + self.thrust.y * DT
+            self.x = WorldDirection.x + self.x + self.thrust.x * DT
+            self.y = WorldDirection.y + self.y + self.thrust.y * DT
             self.mass = self.radius * MASS_CONSTANT
 
             local indexIncrement = 0
@@ -114,4 +165,4 @@ local function Astroid(x, y, color, radius, noOfSides, minOffset, maxOffset, vel
 end
 
 
-return Astroid
+

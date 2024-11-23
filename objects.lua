@@ -1,6 +1,39 @@
 
+function Bullet(x, y, angle, radius, vel)
+    return {
+        x = x,
+        y = y,
+        angle = angle + 90,
+        radius = radius,
+        thrust = {x=0, y=0},
+        vel = vel,
 
-local particleSystem = function (images)
+        dist = 0,
+
+        update = function (self)
+            self.thrust.x = math.cos(math.rad(self.angle)) * self.vel
+            self.thrust.y = -math.sin(math.rad(self.angle)) * self.vel
+            
+            self.x = WorldDirection.x + self.x + self.thrust.x
+            self.y = WorldDirection.y + self.y + self.thrust.y
+            
+            self.dist = self.dist + CalculateDistance(self.thrust.x, self.thrust.y, 2 * self.thrust.x, 2 * self.thrust.y)
+        end,
+        
+        draw = function (self)
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.circle('fill', self.x, self.y, self.radius)
+        end,
+
+        getDist = function (self)
+            return self.dist
+        end
+        
+        
+    }
+end
+
+function ParticleSystem(images)
     local CurrTime = 0
     local PrevTime = 0
     return {
@@ -254,5 +287,85 @@ local particleSystem = function (images)
     }
 end
 
+--- Sprite
+--- @param frames table This could a list of file paths or a list of love-images
+--- @param pos table This is the info concerning the x, y and rotational data of the sprite {x = 0, y = 0, r? = 0}
+--- @param fps number How fast the frames go
+--- @param updateFunction? fun(spriteInfo: table) How thw sprite interacts with itself
+--- @param beforeAnimation? fun(spriteInfo: table) Anything drawing related that occurs before the main animations
+--- @param afterAnimation? fun(spriteInfo: table) Anything drawing related that occurs after the main animations
+--- @return table
+function Sprite(frames, pos, fps, updateFunction, beforeAnimation, afterAnimation)
+    local spriteInfo = {frames=frames, pos=pos, fps=fps, frameIndex=1, updateFunction=updateFunction, before=beforeAnimation, after=afterAnimation}
+    for frameIndex, _ in ipairs(spriteInfo.frames) do
+        if type(spriteInfo.frames[frameIndex]) == "string" then
+            spriteInfo.frames[frameIndex] = love.graphics.newImage(spriteInfo.frames[frameIndex])
+        end
+    end
 
-return particleSystem
+    spriteInfo.draw = function (self)
+        if self.before ~= nil then
+            self:before()
+        end
+
+        local finalFrames = self.frames
+        local position = self.pos
+
+        if #finalFrames then
+            local frameFPS = self.fps
+
+            self.frameIndex = (self.frameIndex + (DT * frameFPS)) % (#finalFrames + 1)
+            
+            local frame = finalFrames[math.floor(self.frameIndex)]
+            love.graphics.draw(frame, position.x, position.y, position.r or 0)
+        else
+            love.graphics.draw(finalFrames[1], position.x, position.y, position.r or 0)
+        end
+        
+        if self.after ~= nil then
+            self:after()
+        end
+    end
+
+    spriteInfo.update = function(self)
+        if self.updateFunction ~= nil then
+            self:updateFunction()
+        end
+    end
+
+    return spriteInfo
+end
+
+
+function SpritesManager()
+    -- sprite = {frames={f1, f2, f3}, pos={x, y, r}, fps, frameIndex, update?=func(sprite), before?=func(sprite), after?=func(sprite)}
+    local sprites = {}
+
+    return {
+        draw = function ()
+            for _, sprite in ipairs(sprites) do
+                sprite:draw()
+            end
+        end,
+        
+        update = function ()
+            for _, sprite in ipairs(sprites) do
+                sprite:update()
+            end
+        end,
+
+        --- Adding a sprite to the environment
+        --- @param frames table This could a list of file paths or a list of love-images
+        --- @param posInfo table This is the info concerning the x, y and rotational data of the sprite {x = 0, y = 0, r? = 0}
+        --- @param fps number How fast the frames go
+        --- @param update? fun(spriteInfo: table) How thw sprite interacts with itself
+        --- @param beforeAnimation? fun(spriteInfo: table) Anything drawing related that occurs before the main animations
+        --- @param afterAnimation? fun(spriteInfo: table) Anything drawing related that occurs after the main animations
+        addSprite = function (frames, posInfo, fps, update, beforeAnimation, afterAnimation)
+            table.insert(sprites, Sprite(frames, posInfo, fps, update, beforeAnimation, afterAnimation))
+        end
+
+    }
+end
+
+

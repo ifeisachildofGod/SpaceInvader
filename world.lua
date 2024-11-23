@@ -1,121 +1,40 @@
 require 'os'
 require 'global'
+require 'characters'
+require 'celestials'
+require 'objects'
 
-math.randomseed(os.time())
-
-local Player = require 'player'
-
-local Enemies = require 'enemy'
-local Rammer, Turett = Enemies[1], Enemies[2]
-
-local Astroid = require 'astroid'
 local UserInterface = require 'ui'.ui
-local Planet = require 'planet'
 
---- Sprite
---- @param frames table This could a list of file paths or a list of love-images
---- @param pos table This is the info concerning the x, y and rotational data of the sprite {x = 0, y = 0, r? = 0}
---- @param fps number How fast the frames go
---- @param updateFunction? fun(spriteInfo: table) How thw sprite interacts with itself
---- @param beforeAnimation? fun(spriteInfo: table) Anything drawing related that occurs before the main animations
---- @param afterAnimation? fun(spriteInfo: table) Anything drawing related that occurs after the main animations
---- @return table
-local function Sprite(frames, pos, fps, updateFunction, beforeAnimation, afterAnimation)
-    local spriteInfo = {frames=frames, pos=pos, fps=fps, frameIndex=1, updateFunction=updateFunction, before=beforeAnimation, after=afterAnimation}
-    for frameIndex, _ in ipairs(spriteInfo.frames) do
-        if type(spriteInfo.frames[frameIndex]) == "string" then
-            spriteInfo.frames[frameIndex] = love.graphics.newImage(spriteInfo.frames[frameIndex])
-        end
-    end
-
-    spriteInfo.draw = function (self)
-        if self.before ~= nil then
-            self:before()
-        end
-
-        local finalFrames = self.frames
-        local position = self.pos
-
-        if #finalFrames then
-            local frameFPS = self.fps
-
-            self.frameIndex = (self.frameIndex + (DT * frameFPS)) % (#finalFrames + 1)
-            
-            local frame = finalFrames[math.floor(self.frameIndex)]
-            love.graphics.draw(frame, position.x, position.y, position.r or 0)
-        else
-            love.graphics.draw(finalFrames[1], position.x, position.y, position.r or 0)
-        end
-        
-        if self.after ~= nil then
-            self:after()
-        end
-    end
-
-    spriteInfo.update = function(self)
-        if self.updateFunction ~= nil then
-            self:updateFunction()
-        end
-    end
-
-    return spriteInfo
-end
-
-local function Environment ()
-    -- sprite = {frames={f1, f2, f3}, pos={x, y, r}, fps, frameIndex, update?=func(sprite), before?=func(sprite), after?=func(sprite)}
-    local sprites = {}
-
-    return {
-        draw = function ()
-            for _, sprite in ipairs(sprites) do
-                sprite:draw()
-            end
-        end,
-        
-        update = function ()
-            for _, sprite in ipairs(sprites) do
-                sprite:update()
-            end
-        end,
-
-        --- Adding a sprite to the environment
-        --- @param frames table This could a list of file paths or a list of love-images
-        --- @param posInfo table This is the info concerning the x, y and rotational data of the sprite {x = 0, y = 0, r? = 0}
-        --- @param fps number How fast the frames go
-        --- @param update? fun(spriteInfo: table) How thw sprite interacts with itself
-        --- @param beforeAnimation? fun(spriteInfo: table) Anything drawing related that occurs before the main animations
-        --- @param afterAnimation? fun(spriteInfo: table) Anything drawing related that occurs after the main animations
-        addSprite = function (frames, posInfo, fps, update, beforeAnimation, afterAnimation)
-            table.insert(sprites, Sprite(frames, posInfo, fps, update, beforeAnimation, afterAnimation))
-        end
-
-    }
-end
 
 local function World()
     local player = Player(love.graphics.getWidth() / 2, love.graphics.getHeight() / 2, 20, true, nil, 'mouse', nil)
     
-    local environment = Environment()
-    environment.addSprite({'background.png'}, {x=-200, y=-100}, 0, function (spriteInfo)
-        spriteInfo.pos.x = spriteInfo.pos.x + worldDirection.x
-        spriteInfo.pos.y = spriteInfo.pos.y + worldDirection.y
+    local environment = SpritesManager()
+    environment.addSprite({'images/background.png'}, {x=-200, y=-100}, 0, function (spriteInfo)
+        spriteInfo.pos.x = spriteInfo.pos.x + WorldDirection.x
+        spriteInfo.pos.y = spriteInfo.pos.y + WorldDirection.y
     end)
     
-    local characters = {}
-    local rammers = {Rammer(love.graphics.getWidth() / 2, love.graphics.getHeight() + 200, 10, player), Rammer(love.graphics.getWidth() / 3, love.graphics.getHeight() + 200, 10, player)}
-    local turetts = {Turett((love.graphics.getWidth() / 2) + 40, (love.graphics.getHeight() / 2) - 40, 10, player), Turett((love.graphics.getWidth() / 2) + 140, (love.graphics.getHeight() / 2) - 30, 10, player)}
-    local planets = {Planet(120, 120, {r=100/255, g=120/255, b=21/255}, 100, characters), Planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, characters, 0.5)}
+    local collisionBodies = {}
+    local rammers = {}--{Rammer(love.graphics.getWidth() / 2, love.graphics.getHeight() + 500, 10, player), Rammer(love.graphics.getWidth() / 3, love.graphics.getHeight() + 800, 10, player)}
+    local turetts = {}--{Turett((love.graphics.getWidth() / 2) + 40, (love.graphics.getHeight() / 2) - 40, 10, player), Turett((love.graphics.getWidth() / 2) + 140, (love.graphics.getHeight() / 2) - 30, 10, player)}
+    local planets = {Planet(120, 120, {r=100/255, g=120/255, b=21/255}, 100, collisionBodies)}--, Planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, collisionBodies, 0.5)}
+    
+    love.wheelmoved = function (_, dy)
+        player:acceleratePlayer(dy)
+    end
 
     for _, rammer in ipairs(rammers) do
-        table.insert(characters, rammer)
+        table.insert(collisionBodies, rammer)
     end
     for _, turett in ipairs(turetts) do
-        table.insert(characters, turett)
+        table.insert(collisionBodies, turett)
     end
     for _, planet in ipairs(planets) do
-        table.insert(characters, planet)
+        table.insert(collisionBodies, planet)
     end
-    table.insert(characters, player)
+    table.insert(collisionBodies, player)
 
     local ui = UserInterface()
 
@@ -123,9 +42,9 @@ local function World()
         player = player,
         rammers = rammers,
         turetts = turetts,
-        characters = characters,
+        collisionBodies = collisionBodies,
         planets = planets,
-        asteroidTbl = {},
+        asteroids = {},
         
         updatePlayerAutoDocking = function (self)
             if self.player.undocked then
@@ -157,12 +76,6 @@ local function World()
 
         updatePlayerBullet = function (self)
             for bulletIndex, bullet in ipairs(self.player.bullets) do
-                for _, astroid in ipairs(self.asteroidTbl) do
-                    if CalculateDistance(bullet.x, bullet.y, astroid.x, astroid.y) < math.max(bullet.radius, astroid.radius) then
-                        self.player:removeBullet(bulletIndex)
-                        astroid:explode()
-                    end 
-                end
                 for _, planet in ipairs(self.planets) do
                     if CalculateDistance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                         table.remove(self.player.bullets, bulletIndex)
@@ -172,7 +85,7 @@ local function World()
         end,
 
         updateAstroid = function (self)
-            if #self.asteroidTbl < ASTROID_MIN_ALLOWED then
+            if #self.asteroids < ASTROID_MIN_ALLOWED then
                 local astroid = Astroid(math.random(love.graphics.getWidth()),
                                         math.random(love.graphics.getHeight()),
                                         {r = math.random(0, 255) / 255, g = math.random(0, 255) / 255, b = math.random(0, 255) / 255},
@@ -183,21 +96,21 @@ local function World()
                                         ASTROID_MAX_VEL,
                                         ASTROID_DEFAULT_AMT,
                                         self)
-                table.insert(self.asteroidTbl, astroid)
-                table.insert(self.characters, astroid)
+                table.insert(self.asteroids, astroid)
+                table.insert(self.collisionBodies, astroid)
                 
             end
 
-            for _, astroid in ipairs(self.asteroidTbl) do
+            for _, astroid in ipairs(self.asteroids) do
                 astroid:update()
-                for _, character in ipairs(self.characters) do
+                for _, character in ipairs(self.collisionBodies) do
                     if tostring(astroid) ~= tostring(character) then
                         if CalculateDistance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 then
                             if not character.exploding then
-                                if ListIndex(self.asteroidTbl, astroid) ~= -1 then
+                                if CalculateListIndex(self.asteroids, astroid) ~= -1 then
                                     astroid:explode()
                                 end
-                                if ListIndex(self.characters, character) ~= -1 then
+                                if CalculateListIndex(self.collisionBodies, character) ~= -1 then
                                     if character.explode ~= nil then
                                         character:explode()
                                     else
@@ -205,6 +118,16 @@ local function World()
                                             character.radius = character.radius + math.sqrt(astroid.mass)
                                         end
                                     end
+                                end
+                            end
+                        end
+                    end
+                    if character.bullets ~= nil then
+                        for bulletIndex, bullet in ipairs(character.bullets) do
+                            if CalculateDistance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius then
+                                if CalculateListIndex(self.asteroids, astroid) ~= -1 then
+                                    table.remove(character.bullets, bulletIndex)
+                                    astroid:explode()
                                 end
                             end
                         end
@@ -232,11 +155,6 @@ local function World()
                         if CalculateDistance(bullet.x, bullet.y, rammer.x, rammer.y) < rammer.radius then
                             rammer:explode()
                             table.remove(turett.bullets, bulletIndex)
-                        end
-                        for _, planet in ipairs(self.planets) do
-                            if CalculateDistance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
-                                table.remove(turett.bullets, bulletIndex)
-                            end
                         end
                     end
                 end
@@ -293,13 +211,19 @@ local function World()
                         self:playerDocked(planet)
                     end
                 end
-                
+
+                for _, turett in ipairs(self.turetts) do
+                    for bulletIndex, bullet in ipairs(turett.bullets) do
+                        if CalculateDistance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
+                            table.remove(turett.bullets, bulletIndex)
+                        end 
+                    end
+                end
             end
         end,
 
         draw = function (self)
             environment.draw()
-            LoggerOutput:write()
             
             self.player:draw()
             
@@ -311,7 +235,7 @@ local function World()
                 turett:draw()
             end
             
-            for _, astroid in ipairs(self.asteroidTbl) do
+            for _, astroid in ipairs(self.asteroids) do
                 astroid:draw()
             end
             for _, planet in ipairs(self.planets) do
@@ -319,19 +243,27 @@ local function World()
             end
 
             ui:draw()
+            LOGGER.write()
+            
+            love.graphics.setColor(1, 0, 0)
+            love.graphics.rectangle('fill', love.graphics.getWidth() - 20, love.graphics.getHeight() - 120, 15, 100)
+            love.graphics.setColor(0, 1, 1)
+            love.graphics.rectangle('fill', love.graphics.getWidth() - 20, love.graphics.getHeight() - 120, 15, (self.player.forwardThruster.accel / self.player.maxThrusterAccel) * 100)
+
+            LOGGER:DEBUG()
 
         end,
 
         update = function (self)
             ui:update()
-            
+
             if not STATESMACHINE.pause then
                 environment.update()
                 
                 self:updatePlanets()
                 self.player:update()
                 if self.player.exploding then
-                    table.remove(self.characters, ListIndex(self.characters, self.player))
+                    table.remove(self.collisionBodies, CalculateListIndex(self.collisionBodies, self.player))
                 end
                 
                 if self.player.exploded then

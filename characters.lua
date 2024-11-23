@@ -1,6 +1,4 @@
-
-local Bullet = require 'bullet'
-local NewParticleSystem = require 'particleSystem'
+require 'objects'
 
 ---@param x number
 ---@param y number
@@ -11,16 +9,25 @@ local NewParticleSystem = require 'particleSystem'
 ---@param drift? boolean
 ---@param color? string
 ---@param brake? table
+---@param accelAccuracy? number
+---@param turnSpeedAccuracy? number
+---@param maxSpeedAccuracy? number
 ---@return table
-local function Player(x, y, radius, drift, color, control, up, down, brake)
-    local ACCEL_SPEED = 0.5
-    local THRUSTER_ACCEL = 1
-    local MAX_SPEED = 600
-    local THRUSTER_MAX_SPEED = 150
+function Player(x, y, radius, drift, color, control, up, down, brake, accelAccuracy, turnSpeedAccuracy, maxSpeedAccuracy)
+    local defaultAccuracy = 1
+    
+    accelAccuracy = accelAccuracy or defaultAccuracy
+    turnSpeedAccuracy = turnSpeedAccuracy or defaultAccuracy
+    maxSpeedAccuracy = maxSpeedAccuracy or defaultAccuracy
+
+    local MAX_SPEED = CalculateInterpolation(100, 600, maxSpeedAccuracy)
+    local THRUSTER_ACCEL = CalculateInterpolation(1, 3, accelAccuracy)
+    local THRUSTER_MAX_SPEED = CalculateInterpolation(50, 150, maxSpeedAccuracy)
+    local MOUSE_TURN_SPEED = CalculateInterpolation(0.04, 0.2, turnSpeedAccuracy)
+    local KEYBOARD_TURN_SPEED = CalculateInterpolation(0.6, 2, turnSpeedAccuracy)
+    local ACCEL_RANGE = 10
     local MOVEMENT_FRICTION = 0.02
     local THRUSTER_DECCEL = 0.5
-    local MOUSE_TURN_SPEED = 0.2
-    local KEYBOARD_TURN_SPEED = 2
     local BRAKE_FRICTION = 0.2
     local BULLET_VEL = 10
     local MAX_BULLETS_AMT = 15
@@ -35,21 +42,22 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
     local right, left
     local mouseNormalization = 1
 
-    local CameraRefPrevX = x
-    local CameraRefPrevY = y
-    local CameraRefNewX = x
-    local CameraRefNewY = y
+    local CameraRefPrev = {x=x, y=y}
+    local CameraRefCurr = {x=x, y=y}
+    local DockedPlanetPrevPos = {x=0, y=0}
+    local DockedPlanetCurrPos = {x=0, y=0}
 
     local updatedExplosion = false
+    local maxThrusterAccel = THRUSTER_ACCEL + ACCEL_RANGE
     
-    local explosionParticles = NewParticleSystem({{image=love.graphics.newImage('background.png'), width=10}})
+    local explosionParticles = ParticleSystem({{image=love.graphics.newImage('images/background.png'), width=10}})
     explosionParticles:setDurationRange(EXPLODE_DUR / 2, EXPLODE_DUR)
     explosionParticles:setSpeedRange(0.5, 1)
 
-    local forwardThrusterParticles = NewParticleSystem({{image=love.graphics.newImage('particle.png'), width=8}})
+    local forwardThrusterParticles = ParticleSystem({{image=love.graphics.newImage('images/particle.png'), width=8}})
     forwardThrusterParticles:setDurationRange(1, 2)
     
-    local reverseThrusterParticles = NewParticleSystem({{image=love.graphics.newImage('particle.png'), width=5}})
+    local reverseThrusterParticles = ParticleSystem({{image=love.graphics.newImage('images/particle.png'), width=5}})
     reverseThrusterParticles:setDurationRange(1, 2)
 
     if type(control) == 'table' then
@@ -69,7 +77,7 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         down = down or {'down', 's'},
         right = right,
         left = left,
-        brake = brake or {'x'},
+        brake = brake or {2},
         mouseAngle = 0,
         yDirection = 0,
         dockedPlanet = nil,
@@ -79,10 +87,8 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         exploded = false,
         undocking = false,
 
-        MAX_SPEED = MAX_SPEED,
         MOUSE_TURN_SPEED = MOUSE_TURN_SPEED,
         KEYBOARD_TURN_SPEED = KEYBOARD_TURN_SPEED,
-        ACCEL_SPEED = ACCEL_SPEED,
         MAX_BULLETS_AMT = MAX_BULLETS_AMT,
         EXPLODE_DUR = EXPLODE_DUR,
         COLLISION_VELOCITY = 100,
@@ -94,14 +100,13 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         undockingAngle = 0,
         continueUndocking = true,
         
+        maxThrusterAccel = maxThrusterAccel,
         explosionParticles = explosionParticles,
-        forwardThrusterParticles = forwardThrusterParticles,
-        reverseThrusterParticles = reverseThrusterParticles,
 
         bullets = {},
-        thrust = {x=0, y=0, friction=MOVEMENT_FRICTION},
-        forwardThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL},
-        reverseThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL},
+        thrust = {x=0, y=0, friction=MOVEMENT_FRICTION, maxSpeed=MAX_SPEED},
+        forwardThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = forwardThrusterParticles},
+        reverseThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = reverseThrusterParticles},
         mainPlotPoints = {0, 0, 0, 0, 0, 0},
         mass = radius * MASS_CONSTANT,
         angle = 0,
@@ -117,8 +122,8 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         
         drawParticles = function (self)
             if not self.exploding then
-                self.forwardThrusterParticles:draw()
-                self.reverseThrusterParticles:draw()
+                self.forwardThruster.particles:draw()
+                self.reverseThruster.particles:draw()
             end
             self.explosionParticles:draw()
         end,
@@ -155,16 +160,14 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
 
         -- Update
         update = function (self)
-            self.thrust.x = Clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -self.MAX_SPEED, self.MAX_SPEED)
-            self.thrust.y = Clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -self.MAX_SPEED, self.MAX_SPEED)
+            self.thrust.x = Clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+            self.thrust.y = Clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
             
             if not self.undocked then
                 self:updateDockingProcedure()
             end
             
-            if not self.docked then
-                self:movePlayer()
-            end
+            self:movePlayer()
 
             self:updateParticles()
             self:updateInput()
@@ -174,8 +177,8 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         end,
         
         updatePlayerWorldProxy = function (self)
-            self.x = self.x + worldDirection.x
-            self.y = self.y + worldDirection.y
+            self.x = self.x + WorldDirection.x
+            self.y = self.y + WorldDirection.y
         end,
 
         updateExplosionProcedures = function (self)
@@ -187,8 +190,8 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
                     updatedExplosion = true
                 end
                 for _, particle in ipairs(self.explosionParticles.particles) do
-                    particle.x = particle.x + worldDirection.x
-                    particle.y = particle.y + worldDirection.y
+                    particle.x = particle.x + WorldDirection.x
+                    particle.y = particle.y + WorldDirection.y
                 end
 
                 self.explodeTime = self.explodeTime + DT
@@ -200,19 +203,17 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         end,
 
         updateWorldDir = function (self)
-            CameraRefPrevX = self.x
-            CameraRefPrevY = self.y
+            CameraRefPrev.x, CameraRefPrev.y = self.x, self.y
             
-            local dx = CameraRefNewX - CameraRefPrevX
-            local dy = CameraRefNewY - CameraRefPrevY
+            local dx = CameraRefCurr.x - CameraRefPrev.x
+            local dy = CameraRefCurr.y - CameraRefPrev.y
             
-            worldDirection.x = dx * CAMERAFOCUSACCEL
-            worldDirection.y = dy * CAMERAFOCUSACCEL
+            WorldDirection.x = dx * CAMERAFOCUSACCEL
+            WorldDirection.y = dy * CAMERAFOCUSACCEL
             
             self:updatePlayerWorldProxy()
             
-            CameraRefNewX = self.x
-            CameraRefNewY = self.y
+            CameraRefCurr.x, CameraRefCurr.y = self.x, self.y
             
         end,
         
@@ -220,49 +221,63 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
             if not self.exploding then
                 movedUp = false
                 movedDown = false
+                
+                local condition
 
-                if self.undocked or self.undocking or self.docked then
+                if not self.docking then
                     for _, ups in ipairs(self.up) do
-                        if love.keyboard.isDown(ups)then
+                        if type(ups) == "number" then
+                            condition = love.mouse.isDown(ups)
+                        elseif type(ups) == "string" then
+                            condition = love.keyboard.isDown(ups)
+                        else
+                            error('Invalid input constant '..ups)
+                        end
+                        
+                        if condition then
                             self.yDirection = 1
                             movedUp = true
                             break
                         end
                     end
-                    for _, downs in ipairs(self.down) do
-                        if love.keyboard.isDown(downs)then
-                            self.yDirection = -1
-                            movedDown = true
-                            break
-                        end
+                    
+                    if not self.docked and not self.undocking then
+                        for _, downs in ipairs(self.down) do
+                            if type(downs) == "number" then
+                                condition = love.mouse.isDown(downs)
+                            elseif type(downs) == "string" then
+                                condition = love.keyboard.isDown(downs)
+                            else
+                                error('Invalid input constant '..downs)
+                            end
+    
+                            if condition then
+                                self.yDirection = -1
+                                movedDown = true
+                                break
+                            end
+                        end 
+                    else
+                        self:releaseReverseThrusters()
                     end
-                end
 
-                if not movedUp then
-                    self:releaseForwardThrusters()
-                end
-
-                if not movedDown then
-                    self:releaseReverseThrusters()
-                end
-
-                if not movedUp and not movedDown then
-                    self:releasePlayerThrust()
-                else
-                    if not self.undocking then
-                        self:onMovePlayer(self.yDirection) 
-                    end
-                end
-                
-                if self.undocked then
                     for _, brakes in ipairs(self.brake) do
-                        if love.keyboard.isDown(brakes)then
+                        if type(brakes) == "number" then
+                            condition = love.mouse.isDown(brakes)
+                        elseif type(brakes) == "string" then
+                            condition = love.keyboard.isDown(brakes)
+                        else
+                            error('Invalid input constant '..brakes)
+                        end
+    
+                        if condition then
                             self:onBrakesPressed()
                             break
                         end
                     end
+                end
                 
-                    mouseNormalization = 1
+                if self.undocked then
                     if control == 'mouse' then
                         local normalizationCenterOffset = radius / 2
                         mouseNormalization = math.min((CalculateDistance(love.mouse.getX(), love.mouse.getY(), self.x, self.y)) / normalizationCenterOffset, 1)
@@ -295,24 +310,24 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
         
         updateParticles = function (self)
             if not self.exploding then
-                self.forwardThrusterParticles:setPosition(self.x + math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 2, self.y - math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 2)
-                self.forwardThrusterParticles:emitEverySecond(FORWARD_THRUSTER_MAX_EMISSION * math.sqrt((self.forwardThruster.y ^ 2) + (self.forwardThruster.x ^ 2)) / self.forwardThruster.maxSpeed)
-                self.forwardThrusterParticles:setAngleRange(self.angle - 10, self.angle + 10)
+                self.forwardThruster.particles:setPosition(self.x + math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 4, self.y - math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 4)
+                self.forwardThruster.particles:emitEverySecond(FORWARD_THRUSTER_MAX_EMISSION * math.sqrt((self.forwardThruster.y ^ 2) + (self.forwardThruster.x ^ 2)) / self.forwardThruster.maxSpeed)
+                self.forwardThruster.particles:setAngleRange(self.angle - 10, self.angle + 10)
                 
-                self.forwardThrusterParticles:update()
+                self.forwardThruster.particles:update()
                 
                 local forwardThrusterLeftX = self.x - (math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 2) - (math.cos(math.rad((self.angle) % 360)) * self.radius / 2)
                 local forwardThrusterLeftY = self.y + (math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 2) + (math.sin(math.rad((self.angle) % 360)) * self.radius / 2)
                 local forwardThrusterRightX = self.x - (math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 2) + (math.cos(math.rad((self.angle) % 360)) * self.radius / 2)
                 local forwardThrusterRightY = self.y + (math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 2) - (math.sin(math.rad((self.angle) % 360)) * self.radius / 2)
                 local emissionAmt = REVERSE_THRUSTER_MAX_EMISSION * math.sqrt((self.reverseThruster.y ^ 2) + (self.reverseThruster.x ^ 2)) / self.reverseThruster.maxSpeed
-                self.reverseThrusterParticles:setAngleRange((self.angle - 180) - 2, (self.angle - 180) + 2)
-                self.reverseThrusterParticles:setPosition(forwardThrusterLeftX, forwardThrusterLeftY)
-                self.reverseThrusterParticles:emitEverySecond(emissionAmt)
-                self.reverseThrusterParticles:setPosition(forwardThrusterRightX, forwardThrusterRightY)
-                self.reverseThrusterParticles:emitEverySecond(emissionAmt)
+                self.reverseThruster.particles:setAngleRange((self.angle - 180) - 2, (self.angle - 180) + 2)
+                self.reverseThruster.particles:setPosition(forwardThrusterLeftX, forwardThrusterLeftY)
+                self.reverseThruster.particles:emitEverySecond(emissionAmt)
+                self.reverseThruster.particles:setPosition(forwardThrusterRightX, forwardThrusterRightY)
+                self.reverseThruster.particles:emitEverySecond(emissionAmt)
                 
-                self.reverseThrusterParticles:update()
+                self.reverseThruster.particles:update()
             end
             self.explosionParticles:update()
         end,
@@ -323,13 +338,15 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
                     if bullet:getDist() > love.graphics.getWidth() * 1.5 then
                         self:removeBullet(index)
                     else
-                        bullet:update(worldDirection)
+                        bullet:update(WorldDirection)
                     end
                 end
             end
         end,
         
         updateDockingProcedure = function (self)
+            DockedPlanetPrevPos.x, DockedPlanetPrevPos.y = self.dockedPlanet.x, self.dockedPlanet.y
+
             local playerPlanetAngle = CalculateAngle(self.dockedPlanet.x, self.dockedPlanet.y, self.x, self.y) - 90
             
             if self.docking then
@@ -357,18 +374,20 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
             end
 
             if self.undocking then
-                -- local Fx, Fy = CalculateTwoBodyVector(self.dockedPlanet, self)
-                local escapeVel = CalculaterEscapeVelocity(self.dockedPlanet)
-                -- local planetGravity = GRAVITATIONAL_CONSTANT * self.dockedPlanet.mass / self.dockedPlanet.radius^2
+                local planetAngle = CalculateAngle(DockedPlanetCurrPos.x, DockedPlanetCurrPos.y, DockedPlanetPrevPos.x, DockedPlanetPrevPos.y) % 360
                 
-                self.forwardThruster.x = math.cos(math.rad(self.undockingAngle)) * (escapeVel + math.abs(self.dockedPlanet.thrust.x))
-                self.forwardThruster.y = -math.sin(math.rad(self.undockingAngle)) * (escapeVel + math.abs(self.dockedPlanet.thrust.y))
+                self.forwardThruster.x = math.cos(math.rad(self.undockingAngle)) * self.forwardThruster.accel
+                self.forwardThruster.y = -math.sin(math.rad(self.undockingAngle)) * self.forwardThruster.accel
                 
+                self.thrust.x = Clamp(self.thrust.x + self.forwardThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+                self.thrust.y = Clamp(self.thrust.y + self.forwardThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+
                 self.x = self.x + self.thrust.x * DT
                 self.y = self.y + self.thrust.y * DT
             end
-            
-            if CalculateDistance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 200 then
+            DockedPlanetCurrPos.x, DockedPlanetCurrPos.y = self.dockedPlanet.x, self.dockedPlanet.y
+
+            if CalculateDistance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 2 then
                 self.undocked = true
                 self.undocking = false
                 self.docked = false
@@ -417,12 +436,27 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
                 self.x = self.x + self.thrust.x * DT
                 self.y = self.y + self.thrust.y * DT
             end
+            
+            if not movedUp then
+                self:releaseForwardThrusters()
+            end
+
+            if not movedDown then
+                self:releaseReverseThrusters()
+            end
+            
+            if not movedUp and not movedDown then
+                self:releasePlayerThrust()
+            else
+                self:onMovePlayer(self.yDirection)
+            end
         end,
         
         onMovePlayer = function (self, dir)
             if not self.exploding then
                 if self.drift then
                     if self.docked then
+                        
                         if dir > 0 then
                             if self.continueUndocking then
                                 self:startUndock() 
@@ -432,11 +466,11 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
                     else
                         self.continueUndocking = true
                         if dir > 0 then
-                            self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * (self.forwardThruster.deccel + 1) * self.forwardThruster.accel
-                            self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * (self.forwardThruster.deccel + 1) * self.forwardThruster.accel
+                            self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                            self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel
                         else
-                            self.reverseThruster.x = math.cos(math.rad(self.angle + 90)) * (self.reverseThruster.deccel + 1) * self.reverseThruster.accel
-                            self.reverseThruster.y = -math.sin(math.rad(self.angle + 90)) * (self.reverseThruster.deccel + 1) * self.reverseThruster.accel
+                            self.reverseThruster.x = math.cos(math.rad(self.angle + 90)) * self.reverseThruster.accel
+                            self.reverseThruster.y = -math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
                         end
                     end
                 else
@@ -452,18 +486,21 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
 
         onBrakesPressed = function (self)
             if not self.exploding then
+                self:releaseForwardThrusters()
                 local forwardThruster_x_dir = -(self.forwardThruster.x * (BRAKE_FRICTION + 1)) * self.forwardThruster.deccel
                 local forwardThruster_y_dir = -(self.forwardThruster.y * (BRAKE_FRICTION + 1)) * self.forwardThruster.deccel
 
                 self.forwardThruster.x = self.forwardThruster.x + forwardThruster_x_dir
                 self.forwardThruster.y = self.forwardThruster.y + forwardThruster_y_dir
-
+                
+                self:releaseReverseThrusters()
                 local reverseThruster_x_dir = -(self.reverseThruster.x * (BRAKE_FRICTION + 1)) * self.reverseThruster.deccel
                 local reverseThruster_y_dir = -(self.reverseThruster.y * (BRAKE_FRICTION + 1)) * self.reverseThruster.deccel
-
+                
                 self.reverseThruster.x = self.reverseThruster.x + reverseThruster_x_dir
                 self.reverseThruster.y = self.reverseThruster.y + reverseThruster_y_dir
-
+                
+                self:releasePlayerThrust()
                 local thrust_x_dir = -(self.thrust.x * (BRAKE_FRICTION + 1)) * self.thrust.friction
                 local thrust_y_dir = -(self.thrust.y * (BRAKE_FRICTION + 1)) * self.thrust.friction
 
@@ -510,23 +547,23 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
             end
 
             local forwardThrusterContainsItAlready = false
-            for _, body in ipairs(self.forwardThrusterParticles.collisionBodies) do
+            for _, body in ipairs(self.forwardThruster.particles.collisionBodies) do
                 if body == planet then
                     forwardThrusterContainsItAlready = true
                 end
             end
             if not forwardThrusterContainsItAlready then
-                self.forwardThrusterParticles:addCollisionBody(planet) 
+                self.forwardThruster.particles:addCollisionBody(planet) 
             end
 
             local reverseThrusterContainsItAlready = false
-            for _, body in ipairs(self.reverseThrusterParticles.collisionBodies) do
+            for _, body in ipairs(self.reverseThruster.particles.collisionBodies) do
                 if body == planet then
                     reverseThrusterContainsItAlready = true
                 end
             end
             if not reverseThrusterContainsItAlready then
-                self.reverseThrusterParticles:addCollisionBody(planet) 
+                self.reverseThruster.particles:addCollisionBody(planet) 
             end
         end,
 
@@ -534,10 +571,138 @@ local function Player(x, y, radius, drift, color, control, up, down, brake)
             self.exploding = true
         end,
         
+        acceleratePlayer = function (self, dy)
+            self.forwardThruster.accel = Clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE / 100), 0, self.maxThrusterAccel)
+            self.reverseThruster.accel = Clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE / 100), 0, self.maxThrusterAccel)
+        end
 
     }
 end
 
+---@param x number
+---@param y number
+---@param radius number
+---@param player table
+---@return table
+function Rammer(x, y, radius, player, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+    local defaultAccuracy = 0
 
-return Player
+    angleContextWindowAccuracy = angleContextWindowAccuracy or defaultAccuracy
+    turnSpeedAccuracy = turnSpeedAccuracy or defaultAccuracy
+    accelAccuracy = accelAccuracy or defaultAccuracy
+    targetPointAccuracy = targetPointAccuracy or defaultAccuracy
+    maxSpeedAccuracy = maxSpeedAccuracy or defaultAccuracy
+
+    local prevPlayerDistance = 0
+    local currPlayerDistance = 0
+
+    local enemy = Player(x, y, radius)
+
+    enemy.player = player
+    
+    enemy.TURN_SPEED = CalculateInterpolation(0.05, 1.5, turnSpeedAccuracy)
+    enemy.angleContextWindow = CalculateInterpolation(360, 10, angleContextWindowAccuracy)
+    enemy.forwardThruster.accel = CalculateInterpolation(enemy.forwardThruster.accel, enemy.forwardThruster.accel * 4.5, accelAccuracy)
+    enemy.thrust.maxSpeed = CalculateInterpolation(100, 10000, maxSpeedAccuracy)
+    
+    enemy.forwardThruster.particles:setScale(4)
+    
+    enemy.update = function (self)
+        if not self.player.exploding and not self.exploding then
+            local dx = (self.player.x + self.player.thrust.x * DT) - self.x
+            local dy = self.y - (self.player.y + self.player.thrust.y * DT)
+            
+            ---@diagnostic disable-next-line: deprecated
+            local angle = math.deg(math.atan2(dy, dx)) - 90
+            
+            local rad = self.radius * CalculateInterpolation(2, 0, targetPointAccuracy)
+            local newDY = dy - (math.sin(math.rad(angle + 90)) * rad)
+            local newDX = dx + (math.cos(math.rad(angle + 90)) * rad)
+            
+            ---@diagnostic disable-next-line: deprecated
+            angle = math.deg(math.atan2(newDY, newDX)) - 90
+            
+            self.angle = CalculateAngleLerp(self.angle, angle, self.TURN_SPEED)
+            if CalculateAngleBetween(self.angle, angle) <= self.angleContextWindow then
+                self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel 
+            else
+                self:onBrakesPressed()
+            end
+            
+            self.thrust.x = Clamp(self.thrust.x + self.forwardThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+            self.thrust.y = Clamp(self.thrust.y + self.forwardThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+
+            if CalculateDistance(self.x, self.y, self.player.x, self.player.y) < self.player.radius then
+                self:explode()
+                self.player:explode()
+            end
+            
+            for index, bullet in ipairs(self.player.bullets) do
+                if CalculateDistance(bullet.x, bullet.y, self.x, self.y) < self.radius then
+                    self:explode()
+                    table.remove(self.player.bullets, index)
+                end
+            end
+        end
+        prevPlayerDistance = math.sqrt((self.x - self.player.x)^2 + (self.player.y - self.y)^2)
+        self:updatePlayerWorldProxy()
+        self:movePlayer()
+        self:updateParticles()
+        self:updateBullets()
+        self:updateExplosionProcedures()
+        currPlayerDistance = math.sqrt((self.x - self.player.x)^2 + (self.player.y - self.y)^2)
+    end
+
+    return enemy
+
+end
+
+function Turett(x, y, radius, player)
+    local enemy = Player(x, y, radius, true)
+    
+    enemy.player = player
+    enemy.TURN_SPEED = 0.05
+    enemy.MAX_BULLETS_AMT = tonumber(enemy.MAX_BULLETS_AMT / 3)
+    enemy.SHOT_RANGE_ANGLE = 45
+
+    enemy.update = function (self)
+        if not self.player.exploding and not self.exploding then
+            self:movePlayer(WorldDirection)
+            local dx = self.player.x - self.x
+            local dy = self.y - self.player.y
+
+            ---@diagnostic disable-next-line: deprecated
+            local angle = (math.deg(math.atan2(dy,dx)) - 90) % 360
+            self.angle = CalculateAngleLerp(self.angle, angle, self.TURN_SPEED)
+            
+            if angle - self.SHOT_RANGE_ANGLE < self.angle and self.angle < angle + self.SHOT_RANGE_ANGLE then
+                self:addBullet()
+            end
+            
+        end
+
+        for index, bullet in ipairs(self.bullets) do
+            if CalculateDistance(bullet.x, bullet.y, self.player.x, self.player.y) < self.player.radius then
+                self.player:explode()
+                table.remove(self.bullets, index)
+            end
+        end
+
+        for index, bullet in ipairs(self.player.bullets) do
+            if CalculateDistance(bullet.x, bullet.y, self.x, self.y) < self.radius then
+                self:explode()
+                table.remove(self.player.bullets, index)
+            end
+        end
+        
+        self:updatePlayerWorldProxy()
+        self:updateParticles()
+        self:updateBullets()
+        self:updateExplosionProcedures()
+    end
+
+    return enemy
+
+end
 
