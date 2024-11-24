@@ -150,7 +150,6 @@ objects = {
                 CurrTime = CurrTime + DT * perSecond
                 if math.floor(CurrTime) ~= math.floor(PrevTime) then
                     self:add()
-                    -- LOGGER:log(CurrTime)
                     PrevTime = CurrTime
                 end
             end,

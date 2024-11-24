@@ -2,23 +2,20 @@ local objects = require 'objects'
 local calculate = require 'calculate'
 local accecories = require 'accecories'
 
-local characters = {}
-
-characters = {
+return {
     ---@param x number
     ---@param y number
     ---@param radius number
     ---@param up? table
     ---@param down? table
     ---@param control? table|string
-    ---@param drift? boolean
     ---@param color? string
     ---@param brake? table
     ---@param accelAccuracy? number
     ---@param turnSpeedAccuracy? number
     ---@param maxSpeedAccuracy? number
     ---@return table
-    player = function (x, y, radius, drift, color, control, up, down, brake, accelAccuracy, turnSpeedAccuracy, maxSpeedAccuracy)
+    playerVehicle = function (x, y, radius, color, control, up, down, brake, accelAccuracy, turnSpeedAccuracy, maxSpeedAccuracy)
         local defaultAccuracy = 1
         
         accelAccuracy = accelAccuracy or defaultAccuracy
@@ -30,25 +27,21 @@ characters = {
         local THRUSTER_MAX_SPEED = calculate.interpolation(50, 150, maxSpeedAccuracy)
         local MOUSE_TURN_SPEED = calculate.interpolation(0.04, 0.2, turnSpeedAccuracy)
         local KEYBOARD_TURN_SPEED = calculate.interpolation(0.6, 2, turnSpeedAccuracy)
-        local ACCEL_RANGE = 10
+        local ACCEL_RANGE = 200
         local MOVEMENT_FRICTION = 0.02
         local THRUSTER_DECCEL = 0.5
         local BRAKE_FRICTION = 0.2
         local BULLET_VEL = 10
         local MAX_BULLETS_AMT = 15
         local EXPLODE_DUR = 2
-        local CAMERAFOCUSACCEL = 1
         local FORWARD_THRUSTER_MAX_EMISSION = 50000
         local REVERSE_THRUSTER_MAX_EMISSION = 40000
-        local MASS_CONSTANT = 0.1
+        local MASS_CONSTANT = 0.0000000000000000000001
         
         local movedUp = false
         local movedDown = false
         local right, left
         local mouseNormalization = 1
-
-        local CameraRefPrev = {x=x, y=y}
-        local CameraRefCurr = {x=x, y=y}
 
         local updatedExplosion = false
         local maxThrusterAccel = THRUSTER_ACCEL + ACCEL_RANGE
@@ -76,6 +69,11 @@ characters = {
         return {
             x = x,
             y = y,
+            angle = 0,
+            radius = radius,
+            mass = radius * MASS_CONSTANT,
+            color = color or {r = 1, g = 0.8, b = 0.5},
+            
             up = up or {'up', 'w'},
             down = down or {'down', 's'},
             right = right,
@@ -87,7 +85,7 @@ characters = {
             docked = false,
             undocked = true,
             docking = false,
-            exploded = false,
+            destroyed = false,
             undocking = false,
 
             MOUSE_TURN_SPEED = MOUSE_TURN_SPEED,
@@ -97,9 +95,7 @@ characters = {
             COLLISION_VELOCITY = 100,
             AUTO_DOCKING_DISTANCE = 100,
 
-            radius = radius,
-            drift = drift or false,
-            exploding = false,
+            gettingDestroyed = false,
             explodeTime = 0,
             undockingAngle = 0,
             continueUndocking = true,
@@ -109,13 +105,9 @@ characters = {
 
             bullets = {},
             thrust = {x=0, y=0, friction=MOVEMENT_FRICTION, maxSpeed=MAX_SPEED},
-            forwardThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = forwardThrusterParticles},
+            forwardThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = forwardThrusterParticles, accelAccelerator=9},
             reverseThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = reverseThrusterParticles},
             mainPlotPoints = {0, 0, 0, 0, 0, 0},
-            mass = radius * MASS_CONSTANT,
-            angle = 0,
-            
-            color = color or {r = 1, g = 0.8, b = 0.5},
 
             -- Draw
             draw = function (self)
@@ -125,7 +117,7 @@ characters = {
             end,
             
             drawParticles = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     self.forwardThruster.particles:draw()
                     self.reverseThruster.particles:draw()
                 end
@@ -141,7 +133,7 @@ characters = {
             end,
             
             drawPlayer = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     local x_dir = math.cos(math.rad(self.angle + 90))
                     local y_dir = math.sin(math.rad(self.angle + 90))
 
@@ -175,18 +167,12 @@ characters = {
 
                 self:updateParticles()
                 self:updateInput()
-                self:updateWorldDir()
                 self:updateBullets()
                 self:updateExplosionProcedures()
             end,
-            
-            updatePlayerWorldProxy = function (self)
-                self.x = self.x + WorldDirection.x
-                self.y = self.y + WorldDirection.y
-            end,
 
             updateExplosionProcedures = function (self)
-                if self.exploding then
+                if self.gettingDestroyed then
                     
                     if not updatedExplosion then
                         self.explosionParticles:setPosition(self.x, self.y)
@@ -201,28 +187,13 @@ characters = {
                     self.explodeTime = self.explodeTime + DT
                     if self.explodeTime >= EXPLODE_DUR then
                         self.explodeTime = 0
-                        self.exploded = true
+                        self.destroyed = true
                     end
                 end
             end,
-
-            updateWorldDir = function (self)
-                CameraRefPrev.x, CameraRefPrev.y = self.x, self.y
-                
-                local dx = CameraRefCurr.x - CameraRefPrev.x
-                local dy = CameraRefCurr.y - CameraRefPrev.y
-                
-                WorldDirection.x = dx * CAMERAFOCUSACCEL
-                WorldDirection.y = dy * CAMERAFOCUSACCEL
-                
-                self:updatePlayerWorldProxy()
-                
-                CameraRefCurr.x, CameraRefCurr.y = self.x, self.y
-                
-            end,
             
             updateInput = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     movedUp = false
                     movedDown = false
                     
@@ -313,7 +284,7 @@ characters = {
             end,
             
             updateParticles = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     self.forwardThruster.particles:setPosition(self.x + math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 4, self.y - math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 4)
                     self.forwardThruster.particles:emitEverySecond(FORWARD_THRUSTER_MAX_EMISSION * math.sqrt((self.forwardThruster.y ^ 2) + (self.forwardThruster.x ^ 2)) / self.forwardThruster.maxSpeed)
                     self.forwardThruster.particles:setAngleRange(self.angle - 10, self.angle + 10)
@@ -363,7 +334,7 @@ characters = {
 
                 if self.docked then
                     local planetPlayerAngle = playerPlanetAngle + 180
-
+                    
                     local planetsEdgeX = self.dockedPlanet.x + math.cos(math.rad(planetPlayerAngle)) * self.dockedPlanet.radius
                     local planetsEdgeY = self.dockedPlanet.y - math.sin(math.rad(planetPlayerAngle)) * self.dockedPlanet.radius
                     local playersEdgeX = -math.cos(math.rad(playerPlanetAngle)) * self.radius
@@ -371,8 +342,11 @@ characters = {
                     
                     self.x = planetsEdgeX + playersEdgeX
                     self.y = planetsEdgeY + playersEdgeY
-                    
+
                     self.angle = (playerPlanetAngle + 90) % 360
+                    
+                    self.thrust.x = 0
+                    self.thrust.y = 0
                 end
 
                 if self.undocking then
@@ -386,7 +360,7 @@ characters = {
                     self.y = self.y + self.thrust.y * DT
                 end
 
-                if calculate.distance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 2 then
+                if calculate.distance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 4 then
                     self.undocked = true
                     self.undocking = false
                     self.docked = false
@@ -404,8 +378,6 @@ characters = {
             startUndock = function (self)
                 self.undocking = true
                 self.docked = false
-                self.undockingAngle = (self.angle + 90) % 360
-                -- LOGGER:log(self.undockingAngle)
             end,
 
             -- Bullets
@@ -414,7 +386,7 @@ characters = {
             end,
 
             addBullet = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     if #self.bullets <= self.MAX_BULLETS_AMT then
                         table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(self.angle + 90)), self.y - math.sin(math.rad(self.angle + 90)), self.angle, 3, BULLET_VEL))
                     end
@@ -423,7 +395,7 @@ characters = {
 
             -- Player moveement
             turnPlayer = function (self, dir)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     self.angle = self.angle + (self.KEYBOARD_TURN_SPEED * dir)
                 end
             end,
@@ -431,7 +403,7 @@ characters = {
             movePlayer = function (self)
                 self.angle = self.angle % 360
                 
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     self.x = self.x + self.thrust.x * DT
                     self.y = self.y + self.thrust.y * DT
                 end
@@ -452,30 +424,27 @@ characters = {
             end,
             
             onMovePlayer = function (self, dir)
-                if not self.exploding then
-                    if self.drift then
-                        if self.docked then
-                            
-                            if dir > 0 then
-                                if self.continueUndocking then
-                                    self:startUndock() 
-                                    self.continueUndocking = false
-                                end
-                            end
-                        else
-                            self.continueUndocking = true
-                            if dir > 0 then
-                                self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
-                                self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel
-                            else
-                                self.reverseThruster.x = math.cos(math.rad(self.angle + 90)) * self.reverseThruster.accel
-                                self.reverseThruster.y = -math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
+                if not self.gettingDestroyed then
+                    self.undocking = false
+                    if self.docked then
+                        if dir > 0 then
+                            self:startUndock()
+                            if self.continueUndocking then
+                                self.undockingAngle = (self.angle + 90) % 360
+                                self.continueUndocking = false
                             end
                         end
                     else
-                        self.thrust.x = self.MAX_SPEED * math.cos(math.rad(self.angle + 90)) * dir / DT
-                        self.thrust.y = -self.MAX_SPEED * math.sin(math.rad(self.angle + 90)) * dir / DT
+                        self.continueUndocking = true
+                        if dir > 0 then
+                            self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                            self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                        else
+                            self.reverseThruster.x = math.cos(math.rad(self.angle + 90)) * self.reverseThruster.accel
+                            self.reverseThruster.y = -math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
+                        end
                     end
+
                     self.forwardThruster.x = self.forwardThruster.x * mouseNormalization
                     self.forwardThruster.y = self.forwardThruster.y * mouseNormalization
                     self.reverseThruster.x = self.reverseThruster.x * mouseNormalization
@@ -484,7 +453,7 @@ characters = {
             end,
 
             onBrakesPressed = function (self)
-                if not self.exploding then
+                if not self.gettingDestroyed then
                     self:releaseForwardThrusters()
                     local forwardThruster_x_dir = -(self.forwardThruster.x * (BRAKE_FRICTION + 1)) * self.forwardThruster.deccel
                     local forwardThruster_y_dir = -(self.forwardThruster.y * (BRAKE_FRICTION + 1)) * self.forwardThruster.deccel
@@ -566,144 +535,169 @@ characters = {
                 end
             end,
 
-            explode = function (self)
-                self.exploding = true
+            destroy = function (self)
+                self.gettingDestroyed = true
             end,
             
             acceleratePlayer = function (self, dy)
-                self.forwardThruster.accel = calculate.clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE / 100), 0, self.maxThrusterAccel)
-                self.reverseThruster.accel = calculate.clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE / 100), 0, self.maxThrusterAccel)
+                self.forwardThruster.accel = calculate.clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE / self.forwardThruster.accelAccelerator), 0, self.maxThrusterAccel)
+                self.reverseThruster.accel = calculate.clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE / self.forwardThruster.accelAccelerator), 0, self.maxThrusterAccel)
             end
 
         }
     end,
-
+    
     ---@param x number
     ---@param y number
     ---@param radius number
-    ---@param player table
+    ---@param planet table
+    ---@param color? table
     ---@return table
-    rammer = function (x, y, radius, player, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
-        local defaultAccuracy = 0
+    player = function (x, y, radius, planet, color)
+        local MASS_CONSTANT = 100
 
-        angleContextWindowAccuracy = angleContextWindowAccuracy or defaultAccuracy
-        turnSpeedAccuracy = turnSpeedAccuracy or defaultAccuracy
-        accelAccuracy = accelAccuracy or defaultAccuracy
-        targetPointAccuracy = targetPointAccuracy or defaultAccuracy
-        maxSpeedAccuracy = maxSpeedAccuracy or defaultAccuracy
+        local explosionDur = 3
+        local updatedExplosion = false
 
-        local prevPlayerDistance = 0
-        local currPlayerDistance = 0
+        local explosionParticles = objects.particleSystem({{image=love.graphics.newImage('images/background.png'), width=10}})
+        explosionParticles:setDurationRange(explosionDur / 2, explosionDur)
+        explosionParticles:setSpeedRange(0.5, 1)
+        explosionParticles:addCollisionBody(planet)
 
-        local enemy = characters.player(x, y, radius)
-
-        enemy.player = player
+        color = color or {1, 0.4, 0.1}
         
-        enemy.TURN_SPEED = calculate.interpolation(0.05, 1.5, turnSpeedAccuracy)
-        enemy.angleContextWindow = calculate.interpolation(360, 10, angleContextWindowAccuracy)
-        enemy.forwardThruster.accel = calculate.interpolation(enemy.forwardThruster.accel, enemy.forwardThruster.accel * 4.5, accelAccuracy)
-        enemy.thrust.maxSpeed = calculate.interpolation(100, 10000, maxSpeedAccuracy)
-        
-        enemy.forwardThruster.particles:setScale(4)
-        
-        enemy.update = function (self)
-            if not self.player.exploding and not self.exploding then
-                local dx = (self.player.x + self.player.thrust.x * DT) - self.x
-                local dy = self.y - (self.player.y + self.player.thrust.y * DT)
+        local player = {}
+
+        player = {
+            x = x,
+            y = y,
+            radius = radius,
+            mass = radius * MASS_CONSTANT,
+            angle = {displacement=0, velocity=0, acceleration=0.09, avgVelocity=400},
+            jump = {velocity=0, acceleration=0, targetAcceleration=6, terminalVelocity=20},
+            planetDisplacement = 0,
+
+            onTheGround = true,
+            gettingDestroyed = false,
+            thrust = {x=0, y=0, speed=27, jumpVel=500, gravity=12},
+            playersEdge = {x=0, y=0},
+            planetsEdge = {x=0, y=0},
+            movementPosition = {x=0, y=0, deccel=0.7},
+            movementDirection = {x=0, y=0},
+            color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
+            playerPlanetAngle = 0,
+            explodeTime = 0,
+            
+            explosionParticles = explosionParticles,
+            
+            move = function (self)
+                self.jump.velocity = calculate.clamp(self.jump.velocity + self.jump.acceleration, -self.jump.terminalVelocity, self.jump.terminalVelocity)
+                self.planetDisplacement = self.planetDisplacement + self.jump.velocity
+
+                self.angle.displacement = (calculate.angle(self.planet.x, self.planet.y, self.x, self.y) - 90) + self.angle.velocity
+                self.angle.displacement = self.angle.displacement % 360
+
+                self.planetsEdge.x = self.planet.x + math.cos(math.rad(self.angle.displacement + 180)) * (self.planet.radius + self.planetDisplacement)
+                self.planetsEdge.y = self.planet.y - math.sin(math.rad(self.angle.displacement + 180)) * (self.planet.radius + self.planetDisplacement)
+                self.playersEdge.x = -math.cos(math.rad(self.angle.displacement)) * self.radius
+                self.playersEdge.y = math.sin(math.rad(self.angle.displacement)) * self.radius
                 
-                ---@diagnostic disable-next-line: deprecated
-                local angle = math.deg(math.atan2(dy, dx)) - 90
+                self.movementPosition.x = self.movementPosition.x + self.thrust.x * DT
+                self.movementPosition.y = self.movementPosition.y + self.thrust.y * DT
                 
-                local rad = self.radius * calculate.interpolation(2, 0, targetPointAccuracy)
-                local newDY = dy - (math.sin(math.rad(angle + 90)) * rad)
-                local newDX = dx + (math.cos(math.rad(angle + 90)) * rad)
-                
-                ---@diagnostic disable-next-line: deprecated
-                angle = math.deg(math.atan2(newDY, newDX)) - 90
-                
-                self.angle = calculate.angleLerp(self.angle, angle, self.TURN_SPEED)
-                if calculate.angleBetween(self.angle, angle) <= self.angleContextWindow then
-                    self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
-                    self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel 
-                else
-                    self:onBrakesPressed()
+                self.x = self.planetsEdge.x + self.playersEdge.x
+                self.y = self.planetsEdge.y + self.playersEdge.y
+            end,
+            
+            setPlanet = function (self, newPlanet)
+                self.planet = newPlanet
+                -- if ListIndex(self.planet.astroBodies, self) == -1 then
+                --     table.insert(self.planet.astroBodies, self)
+                -- end
+                self.gravity = calculate.gravity(self.planet.mass, self.planet.radius)
+            end,
+
+            movePlayerHorizontally = function (self, dir)
+                self.angle.velocity = calculate.lerp(self.angle.velocity, -self.angle.avgVelocity * dir / self.planet.radius, self.angle.acceleration)
+            end,
+            
+            jumpUp = function (self)
+                self.onTheGround = false
+                self.jump.acceleration = self.jump.targetAcceleration
+            end,
+
+            draw = function (self)
+                if not self.gettingDestroyed then
+                    love.graphics.setColor(self.color.r, self.color.g, self.color.b)
+                    love.graphics.circle('fill', self.x, self.y, self.radius)
                 end
-                
-                self.thrust.x = calculate.clamp(self.thrust.x + self.forwardThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
-                self.thrust.y = calculate.clamp(self.thrust.y + self.forwardThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
 
-                if calculate.distance(self.x, self.y, self.player.x, self.player.y) < self.player.radius then
-                    self:explode()
-                    self.player:explode()
+                self.explosionParticles:draw()
+            end,
+
+            update = function (self)
+                if self.planet ~= nil then
+                    self:move()
+                    self:updateInput()
                 end
-                
-                for index, bullet in ipairs(self.player.bullets) do
-                    if calculate.distance(bullet.x, bullet.y, self.x, self.y) < self.radius then
-                        self:explode()
-                        table.remove(self.player.bullets, index)
+                self:updateExplosionProcedures()
+            end,
+            
+            destroy = function (self)
+                self.gettingDestroyed = true
+                self.radus = 1
+            end,
+
+            updateExplosionProcedures = function (self)
+                if self.gettingDestroyed then
+                    if not updatedExplosion then
+                        self.explosionParticles:setPosition(self.x, self.y)
+                        self.explosionParticles:emitOnce(150)
+                        updatedExplosion = true
+                    end
+                    for _, particle in ipairs(self.explosionParticles.particles) do
+                        particle.x = particle.x + WorldDirection.x
+                        particle.y = particle.y + WorldDirection.y
+                    end
+
+                    self.explodeTime = self.explodeTime + DT
+                    if self.explodeTime >= explosionDur then
+                        self.explodeTime = 0
+                        self.destroyed = true
                     end
                 end
-            end
-            prevPlayerDistance = math.sqrt((self.x - self.player.x)^2 + (self.player.y - self.y)^2)
-            self:updatePlayerWorldProxy()
-            self:movePlayer()
-            self:updateParticles()
-            self:updateBullets()
-            self:updateExplosionProcedures()
-            currPlayerDistance = math.sqrt((self.x - self.player.x)^2 + (self.player.y - self.y)^2)
-        end
-
-        return enemy
-
-    end,
-
-    turret = function (x, y, radius, player)
-        local enemy = characters.player(x, y, radius, true)
-        
-        enemy.player = player
-        enemy.TURN_SPEED = 0.05
-        enemy.MAX_BULLETS_AMT = tonumber(enemy.MAX_BULLETS_AMT / 3)
-        enemy.SHOT_RANGE_ANGLE = 45
-
-        enemy.update = function (self)
-            if not self.player.exploding and not self.exploding then
-                self:movePlayer(WorldDirection)
-                local dx = self.player.x - self.x
-                local dy = self.y - self.player.y
-
-                ---@diagnostic disable-next-line: deprecated
-                local angle = (math.deg(math.atan2(dy,dx)) - 90) % 360
-                self.angle = calculate.angleLerp(self.angle, angle, self.TURN_SPEED)
-                
-                if angle - self.SHOT_RANGE_ANGLE < self.angle and self.angle < angle + self.SHOT_RANGE_ANGLE then
-                    self:addBullet()
-                end
-                
-            end
-
-            for index, bullet in ipairs(self.bullets) do
-                if calculate.distance(bullet.x, bullet.y, self.player.x, self.player.y) < self.player.radius then
-                    self.player:explode()
-                    table.remove(self.bullets, index)
-                end
-            end
-
-            for index, bullet in ipairs(self.player.bullets) do
-                if calculate.distance(bullet.x, bullet.y, self.x, self.y) < self.radius then
-                    self:explode()
-                    table.remove(self.player.bullets, index)
-                end
-            end
+                self.explosionParticles:update()
+            end,
             
-            self:updatePlayerWorldProxy()
-            self:updateParticles()
-            self:updateBullets()
-            self:updateExplosionProcedures()
-        end
+            updateInput = function (self)
+                local planetDistance = calculate.distance(self.x, self.y, self.planet.x, self.planet.y) - (self.radius + self.planet.radius) + 1
 
-        return enemy
+                if love.keyboard.isDown('d') then
+                    self:movePlayerHorizontally(1 / planetDistance)
+                elseif love.keyboard.isDown('a') then
+                    self:movePlayerHorizontally(-1 / planetDistance)
+                else
+                    self.angle.velocity = calculate.lerp(self.angle.velocity, 0, self.angle.acceleration / planetDistance)
+                end
 
+                if not self.onTheGround then
+                    self.jump.acceleration = -self.gravity
+                    if self.planetDisplacement <= 0 then
+                        self.onTheGround = true
+                        self.jump.acceleration = 0
+                        self.jump.velocity = 0
+                        self.planetDisplacement = 0
+                    end
+                end
+                if love.keyboard.isDown('w') and self.onTheGround then
+                    self:jumpUp()
+                end
+                
+            end,
+        }
+        
+        player:setPlanet(planet)
+
+        return player
     end
 }
-
-return characters

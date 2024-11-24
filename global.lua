@@ -4,14 +4,6 @@ local ui = require 'ui'
 DEBUGGING = true
 WorldDirection = {x=0, y=0}
 
-
-
-
-
-
-
-
-
 local stateMachineStates = {
     'pause',
     'normal',
@@ -65,58 +57,57 @@ end
 ---@param loggerFilePath? string
 ---@param scrollThresh? integer
 ---@return table
-function Logger(loggerFilePath, scrollThresh)
+function LoggerFunc(loggerFilePath, scrollThresh)
     local loggerOutput = ui.text(0, 0, 'p', {1, 1, 1})
     local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\SpaceInvader\\debug\\logger'
     local scollThreshold = scrollThresh or 15
 
-    return {
+    local logger = {}
+
+    logger = {
         text = '',
         sep = ' ',
         ending = '\n',
         loggingFile = io.open(loggerPath, "a"),
         loggerFilePath = loggerPath,
 
-        log = function (self, ...)
+        log = function (...)
             if DEBUGGING then
                 local args = {...}
                 local printedText = ''
                 
                 for _, msg in pairs(args) do
-                    printedText = printedText..tostring(msg)..((#args > 1) and self.sep or '')
+                    printedText = printedText..tostring(msg)..((#args > 1) and logger.sep or '')
                 end
-                printedText = printedText..self.ending
+                printedText = printedText..logger.ending
                 
-                if self.loggingFile ~= nil then
-                    self.loggingFile:write(printedText)
+                if logger.loggingFile ~= nil then
+                    logger.loggingFile:write(printedText)
                 end
                 
                 local count = 0
-                self.text = self.text..printedText
-                for i = 1, #self.text do
-                    if string.sub(self.text, i, i) == '\n' then
+                logger.text = logger.text..printedText
+                for i = 1, #logger.text do
+                    if string.sub(logger.text, i, i) == '\n' then
                         count = count + 1
                     end    
                 end
                 
                 if count >= scollThreshold then
                     local firstNewlineIndex
-                    for i = 1, #self.text do
-                        if string.sub(self.text, i, i) == '\n' then
+                    for i = 1, #logger.text do
+                        if string.sub(logger.text, i, i) == '\n' then
                             firstNewlineIndex = i + 1
                             break
                         end
                     end
-                    -- local firstNewlineIndex = string.find(self.text, '\n')
+                    -- local firstNewlineIndex = string.find(logger.text, '\n')
                     if firstNewlineIndex ~= nil then
-                        self.text = string.sub(self.text, firstNewlineIndex)
+                        logger.text = string.sub(logger.text, firstNewlineIndex)
                     end
                 end
 
-                loggerOutput:setText(self.text)
-                if count >= scollThreshold then
-                    -- loggerOutput:scroll(0, -1)
-                end 
+                loggerOutput:setText(logger.text)
             end
         end,
         
@@ -157,22 +148,17 @@ function Logger(loggerFilePath, scrollThresh)
         end,
 
         DEBUG = function (self)
-            -- self.text = string.sub(self.text, 2)
-            -- self:log(#self.text)
-            -- self:log(string.find(self.text, '\n'))
-            -- local count = 0
-            -- for i = 1, #self.text do
-            --     if string.sub(self.text, i, i) == '\n' then
-            --         count = count + 1
-            --     end
-            -- end
-            -- if count >= 15 then
-            --     self:log('string.sub(self.text, 1, 1)')
-            --     return
-            -- end
-            -- self:log(1)
         end
     }
+
+    return logger
 end
+
+logger = LoggerFunc()
+
+logger:setLogPath(logger.loggerFilePath)
+logger:clearFile()
+
+logger:log('[Running] Love "'..debug.getinfo(1).source..'"')
 
 STATESMACHINE = StateMachine(stateMachineStates)

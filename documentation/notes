@@ -1,47 +1,49 @@
 __________________________________________________________________________________________________________________________________________
 DONE
 __________________________________________________________________________________________________________________________________________
-1. Fix the player movement
-2. Fix the camera positioning
-3. The mouse control is still cursed you need to fix it
-4. Update the movement of the camera to be better suited to moving fast
-5. Find a way to make astroids collide with every thing in the world that moves
-6. Create a custom particle system
-7. Make the thrusters particles
-8. Find a way to make the player collide with planets and get destroyed
-9. Add reverse thrusters particle effects
-10. Fix the angle problem
-11. Fix the remove last line bug in the logger
-12. Find how to get the angular direction of the planets from either it's change in position
-13. Fix the dead turret bullet bug
-14. Make the rammers more accurate
-15. Make the undocking better
-16. Find the right variables for the good and bad versions of the player
-17. Find the right variables for the good and bad versions of the rammers
-18. Put related scripts in related files
-19. Make the mouse wheel control the speed of the player, add provisions in order to temporarily manage the speed feedback loop
-20. Refactor the code
-21. Fix the problem with the player getting destroyed when the world moves too fast
+- Fix the playerVehicle movement
+- Fix the camera positioning
+- The mouse control is still cursed you need to fix it
+- Update the movement of the camera to be better suited to moving fast
+- Find a way to make astroids collide with every thing in the world that moves
+- Create a custom particle system
+- Make the thrusters particles
+- Find a way to make the playerVehicle collide with planets and get destroyed
+- Add reverse thrusters particle effects
+- Fix the angle problem
+- Fix the remove last line bug in the logger
+- Find how to get the angular direction of the planets from either it's change in position
+- Fix the dead turret bullet bug
+- Make the rammers more accurate
+- Make the undocking better
+- Find the right variables for the good and bad versions of the playerVehicle
+- Find the right variables for the good and bad versions of the rammers
+- Put related scripts in related files
+- Make the mouse wheel control the speed of the playerVehicle, add provisions in order to temporarily manage the speed feedback loop
+- Refactor the code
+- Fix the problem with the playerVehicle getting destroyed when the world moves too fast
 ____________
 RECENT
 ____________
-
-__________________________________________________________________________________________________________________________________________
+- Add player out of ship mode
+- D0 a lot more refactoring
 __________________________________________________________________________________________________________________________________________
 NOT DONE
 __________________________________________________________________________________________________________________________________________
 Long Term
 __________________________________________________________________________________________________________________________________________
-1. **Find a way to make planets collide and get destroyed**
-2. **Make the player a bit more dynamic, come out of his ship, explore the planet and be chased by enemies on the planet**
-3. Make the game multiplayer compatible
-4. Make a mechanic for procedurally generated enemies and astroids and planets
-
-5. Do something with the UI script
-6. Add two new enemies
+- **Find a way to make planets collide and get destroyed**
+- *Make the playerVehicle a bit more dynamic, come out of his ship, explore the planet and be chased by enemies on the planet*
+- Make the game multiplayer compatible
+- Make a mechanic for procedurally generated enemies and astroids and planets
+- Do something with the UI script
+- Add two new enemies
+- Add a system which allows two players to ride a ship, one shooting and one driving
 __________________________________________________________________________________________________________________________________________
 Short Term
 __________________________________________________________________________________________________________________________________________
-
-__________________________________________________________________________________________________________________________________________
+- Add a mechanic for auto player landing on another planet if you are to far from current
+- In the scene file, make it so that you can automatically apply gravity from any planet, not just from yours when you jump: Decentralise the gravity of the player in the world
+- Change the input system and make it more dynamic
+- Make the parameters for the input system function based instead of table
 __________________________________________________________________________________________________________________________________________

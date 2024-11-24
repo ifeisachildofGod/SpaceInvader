@@ -1,19 +1,30 @@
-
+require 'global'
 
 math.randomseed(os.time())
 
 local World = require 'world'
-local world = World()
+local modes = require 'modes'
+local celestials = require 'collisionBodies.celestials'
 
-LOGGER = Logger()
-LOGGER:setLogPath(LOGGER.loggerFilePath)
+local function Init()
+    local worldCollisionBodies = {}
+    local worldPlanets = {celestials.planet(love.graphics.getWidth() / 2, (love.graphics.getHeight() / 2) + 110, {r=100/255, g=120/255, b=21/255}, 100, worldCollisionBodies)}--, celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, collisionBodies, 0.5)}
+    
+    for _, planet in ipairs(worldPlanets) do
+        table.insert(worldCollisionBodies, planet)
+    end
+    
+    local world = World(worldPlanets, worldCollisionBodies, modes.player)
+    
+    return world
+end
+
+local world = Init()
+
 DT = 0
 
 function love.load()
-    
     love.graphics.setFont(Fonts['p'])
-    LOGGER:clearFile()
-    LOGGER:log('[Running] Love "'..debug.getinfo(1).source..'"')
 end
 
 function love.draw()
@@ -35,7 +46,7 @@ end
 function love.update(dt)
     DT = dt
     if STATESMACHINE.restart then
-        world = World()
+        world = Init()
         STATESMACHINE:setState('normal')
     else
         world:update()
@@ -43,5 +54,5 @@ function love.update(dt)
 end
 
 function love.quit()
-    LOGGER:closeFile()
+    logger:closeFile()
 end

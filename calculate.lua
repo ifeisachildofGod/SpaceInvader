@@ -7,14 +7,27 @@ calculate = {
         return math.max(math.min(x, max), min)
     end,
 
+    ---@overload fun(x: number, y: number): number
+    ---@param x1 number
+    ---@param y1 number
+    ---@param x2 number
+    ---@param y2 number
+    ---@return number
     distance = function (x1, y1, x2, y2)
-        local dX = x2 - x1
-        local dY = y2 - y1
+        local dX
+        local dY
+        if x1 ~= nil and x2 ~= nil then
+            dX = x2 - x1
+            dY = y2 - y1
+        else
+            dX = x1
+            dY = y1
+        end
 
         return math.sqrt(dX^2 + dY^2)
     end,
 
-    ---@overload fun(x: number, y: number)
+    ---@overload fun(x: number, y: number): number
     ---@param x1 number
     ---@param y1 number
     ---@param x2 number
@@ -48,9 +61,17 @@ calculate = {
 
         return diff
     end,
+    
+    lerp = function (from, to, by)
+        return from + (to - from) * by
+    end,
 
     angleLerp = function (from, to, by)
         return (from + calculate.angleBetween(from, to) * by) % 360
+    end,
+    
+    gravity = function (mass, radius)
+        return calculate.GRAVITATIONAL_CONSTANT * mass / radius^2
     end,
 
     -- Both arguements must have x, y and radius
@@ -78,13 +99,6 @@ calculate = {
         return Fx / satelliteBodyMass, Fy / satelliteBodyMass
     end,
 
-    -- ---@param planetaryBody table Must have a radius property
-    -- ---@return number
-    -- escapeVelocity = function (planetaryBody)
-    --     local g = (calculate.GRAVITATIONAL_CONSTANT * (planetaryBody.radius or planetaryBody.mass)) / planetaryBody.radius^2
-    --     return math.sqrt(2 * g * planetaryBody.radius)
-    -- end,
-
     -- Both arguements must have x, y and radius
     ---@param staticBody table
     ---@param satelliteBody table
@@ -93,17 +107,18 @@ calculate = {
     ---@return number
     ---@return number
     twoBodyThrust = function (staticBody, satelliteBody)
-        local bodyFx, bodyFy =  calculate.twoBodyVector(staticBody, satelliteBody)
-        local myFx, myFy =  calculate.twoBodyVector(satelliteBody, staticBody)
+        local satelliteBodyFx, satelliteBodyFy =  calculate.twoBodyVector(staticBody, satelliteBody)
         
-        staticBody.thrust.x = staticBody.thrust.x + myFx
-        staticBody.thrust.y = staticBody.thrust.y + myFy
+        satelliteBody.thrust.x = satelliteBody.thrust.x + satelliteBodyFx
+        satelliteBody.thrust.y = satelliteBody.thrust.y + satelliteBodyFy
 
-        staticBody.x = staticBody.x + staticBody.thrust.x * DT
-        staticBody.y = staticBody.y + staticBody.thrust.y * DT
+        local staticBodyFx, staticBodyFy =  calculate.twoBodyVector(satelliteBody, staticBody)
         
-        satelliteBody.thrust.x = satelliteBody.thrust.x + bodyFx
-        satelliteBody.thrust.y = satelliteBody.thrust.y + bodyFy
+        staticBody.thrust.x = staticBody.thrust.x + staticBodyFx
+        staticBody.thrust.y = staticBody.thrust.y + staticBodyFy
+
+        -- staticBody.x = staticBody.x + staticBody.thrust.x * DT
+        -- staticBody.y = staticBody.y + staticBody.thrust.y * DT
 
         return staticBody.thrust.x, staticBody.thrust.y, satelliteBody.thrust.x, satelliteBody.thrust.y
     end,

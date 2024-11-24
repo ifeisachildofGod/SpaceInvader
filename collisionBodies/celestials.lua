@@ -3,7 +3,7 @@ local calculate = require 'calculate'
 local celestials = {}
 
 celestials = {
-    ASTROID_MIN_ALLOWED = 10,
+    ASTROID_MIN_ALLOWED = 2,
     ASTROID_MAX_RAD = 90,
     ASTROID_MIN_SIDES = 5,
     ASTROID_MAX_SIDES = 10,
@@ -12,7 +12,7 @@ celestials = {
 
     planet = function (x, y, color, radius, astroBodies, massConstant)
         local astroBodiesRef = astroBodies
-        local MASS_CONSTANT = massConstant or 0.00000000000000000000000000000000001
+        local MASS_CONSTANT = massConstant or 0.00000001
         
         return {
             x = x,
@@ -30,21 +30,14 @@ celestials = {
 
             applyPhysics = function (self)
                 for _, body in ipairs(self.astroBodies) do
-                    if calculate.distance(self.x, self.y, body.x, body.y) <= self.radius^2 and body ~= self then
+                    if body ~= self then
                         self.thrust.x, self.thrust.y, body.thrust.x, body.thrust.y = calculate.twoBodyThrust(self, body)
                         
                         self.x = self.x + self.thrust.x * DT
                         self.y = self.y + self.thrust.y * DT
                         
-                        if body.docked ~= nil then
-                            body.x = body.x + body.thrust.x * DT
-                            body.y = body.y + body.thrust.y * DT
-                        else
-                            if not body.docked then
-                                body.x = body.x + body.thrust.x * DT
-                                body.y = body.y + body.thrust.y * DT
-                            end
-                        end
+                        body.x = body.x + body.thrust.x * DT
+                        body.y = body.y + body.thrust.y * DT
                     end
                 end
             end,
@@ -55,8 +48,6 @@ celestials = {
                 self.y = self.y + WorldDirection.y
                 self.mass = self.radius * MASS_CONSTANT
             end
-
-
         }
     end,
 
@@ -74,7 +65,7 @@ celestials = {
     ---@return table
     astroid = function (x, y, color, radius, noOfSides, minOffset, maxOffset, velRange, astroidAmt, world, angle)
         local VELOCITY = math.random(velRange)
-        local MASS_CONSTANT = 0.05
+        local MASS_CONSTANT = 0.00000000005
 
         local myWorld = world
         local polygonPoints = {}
@@ -101,7 +92,7 @@ celestials = {
             thrust = {x=math.cos(math.rad(theAngle + 90)) * VELOCITY, y=-math.sin(math.rad(theAngle + 90)) * VELOCITY},
             radius = radius,
 
-            explode = function (self)
+            destroy = function (self)
                 self.destroyed = true
 
                 local astroidsIndex = ListIndex(self.world.asteroids, self)
