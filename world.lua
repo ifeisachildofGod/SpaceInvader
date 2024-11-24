@@ -1,25 +1,25 @@
 require 'os'
 require 'global'
-require 'characters'
-require 'celestials'
-require 'objects'
-
-local UserInterface = require 'ui'.ui
+local ui = require 'ui'
+local objects = require 'objects'
+local calculate = require 'calculate'
+local characters = require 'collisionBodies.characters'
+local celestials = require 'collisionBodies.celestials'
 
 
 local function World()
-    local player = Player(love.graphics.getWidth() / 2, love.graphics.getHeight() / 2, 20, true, nil, 'mouse', nil)
+    local player = characters.player(love.graphics.getWidth() / 2, love.graphics.getHeight() / 2, 20, true, nil, 'mouse', nil)
     
-    local environment = SpritesManager()
+    local environment = objects.spritesManager()
     environment.addSprite({'images/background.png'}, {x=-200, y=-100}, 0, function (spriteInfo)
         spriteInfo.pos.x = spriteInfo.pos.x + WorldDirection.x
         spriteInfo.pos.y = spriteInfo.pos.y + WorldDirection.y
     end)
     
     local collisionBodies = {}
-    local rammers = {}--{Rammer(love.graphics.getWidth() / 2, love.graphics.getHeight() + 500, 10, player), Rammer(love.graphics.getWidth() / 3, love.graphics.getHeight() + 800, 10, player)}
-    local turetts = {}--{Turett((love.graphics.getWidth() / 2) + 40, (love.graphics.getHeight() / 2) - 40, 10, player), Turett((love.graphics.getWidth() / 2) + 140, (love.graphics.getHeight() / 2) - 30, 10, player)}
-    local planets = {Planet(120, 120, {r=100/255, g=120/255, b=21/255}, 100, collisionBodies)}--, Planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, collisionBodies, 0.5)}
+    local rammers = {}--{characters.rammer(love.graphics.getWidth() / 2, love.graphics.getHeight() + 500, 10, player), characters.rammer(love.graphics.getWidth() / 3, love.graphics.getHeight() + 800, 10, player)}
+    local turetts = {}--{characters.turret((love.graphics.getWidth() / 2) + 40, (love.graphics.getHeight() / 2) - 40, 10, player), characters.turret((love.graphics.getWidth() / 2) + 140, (love.graphics.getHeight() / 2) - 30, 10, player)}
+    local planets = {celestials.planet(120, 120, {r=100/255, g=120/255, b=21/255}, 100, collisionBodies)}--, celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, collisionBodies, 0.5)}
     
     love.wheelmoved = function (_, dy)
         player:acceleratePlayer(dy)
@@ -36,7 +36,7 @@ local function World()
     end
     table.insert(collisionBodies, player)
 
-    local ui = UserInterface()
+    local userInterface = ui.userInterface()
 
     return {
         player = player,
@@ -49,13 +49,13 @@ local function World()
         updatePlayerAutoDocking = function (self)
             if self.player.undocked then
                 for _, planet in ipairs(self.planets) do
-                    local playerPlanetAngle = CalculateAngle(planet.x, planet.y, self.player.x, self.player.y) - 90
-                    local planetPlayerAngle = CalculateAngle(planet.x, planet.y, self.player.x, self.player.y) + 90
-                    local distanceBetweenEnds = CalculateDistance(planet.x + math.cos(math.rad(planetPlayerAngle)) * planet.radius,
+                    local playerPlanetAngle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y) - 90
+                    local planetPlayerAngle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y) + 90
+                    local distanceBetweenEnds = calculate.distance(planet.x + math.cos(math.rad(planetPlayerAngle)) * planet.radius,
                                                             planet.y - math.sin(math.rad(planetPlayerAngle)) * planet.radius,
                                                             self.player.x + math.cos(math.rad(playerPlanetAngle)) * self.player.radius,
                                                             self.player.y - math.sin(math.rad(playerPlanetAngle)) * self.player.radius)
-                    if distanceBetweenEnds <= PLAYER_DOCKING_DISTANCE and self.player.dockedPlanet == nil then
+                    if distanceBetweenEnds <= self.player.AUTO_DOCKING_DISTANCE and self.player.dockedPlanet == nil then
                         self.player:startDock(planet)
                     end
                 end
@@ -77,7 +77,7 @@ local function World()
         updatePlayerBullet = function (self)
             for bulletIndex, bullet in ipairs(self.player.bullets) do
                 for _, planet in ipairs(self.planets) do
-                    if CalculateDistance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
+                    if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                         table.remove(self.player.bullets, bulletIndex)
                     end
                 end
@@ -85,16 +85,16 @@ local function World()
         end,
 
         updateAstroid = function (self)
-            if #self.asteroids < ASTROID_MIN_ALLOWED then
-                local astroid = Astroid(math.random(love.graphics.getWidth()),
+            if #self.asteroids < celestials.ASTROID_MIN_ALLOWED then
+                local astroid = celestials.astroid(math.random(love.graphics.getWidth()),
                                         math.random(love.graphics.getHeight()),
                                         {r = math.random(0, 255) / 255, g = math.random(0, 255) / 255, b = math.random(0, 255) / 255},
-                                        math.random(ASTROID_MIN_RAD, ASTROID_MAX_RAD),
-                                        math.random(ASTROID_MIN_SIDES, ASTROID_MAX_SIDES),
-                                        -tonumber(ASTROID_MAX_RAD / 5),
-                                        tonumber(ASTROID_MAX_RAD / 5) or ASTROID_MAX_RAD / 5,
-                                        ASTROID_MAX_VEL,
-                                        ASTROID_DEFAULT_AMT,
+                                        math.random(celestials.ASTROID_MIN_ALLOWED, celestials.ASTROID_MAX_RAD),
+                                        math.random(celestials.ASTROID_MIN_SIDES, celestials.ASTROID_MAX_SIDES),
+                                        -tonumber(celestials.ASTROID_MAX_RAD / 5),
+                                        tonumber(celestials.ASTROID_MAX_RAD / 5) or celestials.ASTROID_MAX_RAD / 5,
+                                        celestials.ASTROID_MAX_VEL,
+                                        celestials.ASTROID_DEFAULT_AMT,
                                         self)
                 table.insert(self.asteroids, astroid)
                 table.insert(self.collisionBodies, astroid)
@@ -105,12 +105,12 @@ local function World()
                 astroid:update()
                 for _, character in ipairs(self.collisionBodies) do
                     if tostring(astroid) ~= tostring(character) then
-                        if CalculateDistance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 then
+                        if calculate.distance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 then
                             if not character.exploding then
-                                if CalculateListIndex(self.asteroids, astroid) ~= -1 then
+                                if ListIndex(self.asteroids, astroid) ~= -1 then
                                     astroid:explode()
                                 end
-                                if CalculateListIndex(self.collisionBodies, character) ~= -1 then
+                                if ListIndex(self.collisionBodies, character) ~= -1 then
                                     if character.explode ~= nil then
                                         character:explode()
                                     else
@@ -124,8 +124,8 @@ local function World()
                     end
                     if character.bullets ~= nil then
                         for bulletIndex, bullet in ipairs(character.bullets) do
-                            if CalculateDistance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius then
-                                if CalculateListIndex(self.asteroids, astroid) ~= -1 then
+                            if calculate.distance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius then
+                                if ListIndex(self.asteroids, astroid) ~= -1 then
                                     table.remove(character.bullets, bulletIndex)
                                     astroid:explode()
                                 end
@@ -141,7 +141,7 @@ local function World()
                 turett:update()
                 
                 for _, planet in ipairs(self.planets) do
-                    if CalculateDistance(planet.x, planet.y, turett.x, turett.y) <= planet.radius then
+                    if calculate.distance(planet.x, planet.y, turett.x, turett.y) <= planet.radius then
                         turett:explode()
                     end
                 end
@@ -152,7 +152,7 @@ local function World()
 
                 for bulletIndex, bullet in ipairs(turett.bullets) do
                     for _, rammer in ipairs(self.rammers) do
-                        if CalculateDistance(bullet.x, bullet.y, rammer.x, rammer.y) < rammer.radius then
+                        if calculate.distance(bullet.x, bullet.y, rammer.x, rammer.y) < rammer.radius then
                             rammer:explode()
                             table.remove(turett.bullets, bulletIndex)
                         end
@@ -166,7 +166,7 @@ local function World()
                 rammer:update()
                 
                 for _, planet in ipairs(self.planets) do
-                    if CalculateDistance(planet.x, planet.y, rammer.x, rammer.y) <= planet.radius then
+                    if calculate.distance(planet.x, planet.y, rammer.x, rammer.y) <= planet.radius then
                         rammer:explode()
                     end
                 end
@@ -176,7 +176,7 @@ local function World()
                 end
 
                 for _, turett in ipairs(self.turetts) do
-                    if CalculateDistance(turett.x, turett.y, rammer.x, rammer.y) < turett.radius then
+                    if calculate.distance(turett.x, turett.y, rammer.x, rammer.y) < turett.radius then
                         rammer:explode()
                         turett:explode()
                     end
@@ -193,28 +193,31 @@ local function World()
 
         updatePlanets = function (self)
             for _, planet in ipairs(self.planets) do
-                local distance = CalculateDistance(planet.x, planet.y, self.player.x, self.player.y)
+                local distance = calculate.distance(planet.x, planet.y, self.player.x, self.player.y)
                 local touchDown = distance <= planet.radius + self.player.radius
                 
                 planet:update()
                 
-                self.player:addEmissionCollisionPlanet(planet)
-                
-                local angle = CalculateAngle(planet.x, planet.y, self.player.x, self.player.y) % 360
-                local dAngle = math.abs(self.player.angle - angle)
+                if not self.player.exploded then
+                    self.player:addEmissionCollisionPlanet(planet)
 
-                if touchDown then
-                    if dAngle >= 20 or math.sqrt(self.player.thrust.x^2 + self.player.thrust.y^2) > self.player.COLLISION_VELOCITY then
-                        self.player:explode()
-                        return
-                    else
-                        self:playerDocked(planet)
+                    local angle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y) % 360
+                    local dAngle = math.abs(self.player.angle - angle)
+
+                    if touchDown then
+                        if not self.player.docked then
+                            if dAngle >= 20 or math.sqrt(self.player.thrust.x^2 + self.player.thrust.y^2) > self.player.COLLISION_VELOCITY then
+                                self.player:explode()
+                            else
+                                self:playerDocked(planet)
+                            end
+                        end
                     end
                 end
-
+                
                 for _, turett in ipairs(self.turetts) do
                     for bulletIndex, bullet in ipairs(turett.bullets) do
-                        if CalculateDistance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
+                        if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                             table.remove(turett.bullets, bulletIndex)
                         end 
                     end
@@ -242,7 +245,7 @@ local function World()
                 planet:draw()
             end
 
-            ui:draw()
+            userInterface:draw()
             LOGGER.write()
             
             love.graphics.setColor(1, 0, 0)
@@ -255,7 +258,7 @@ local function World()
         end,
 
         update = function (self)
-            ui:update()
+            userInterface:update()
 
             if not STATESMACHINE.pause then
                 environment.update()
@@ -263,7 +266,7 @@ local function World()
                 self:updatePlanets()
                 self.player:update()
                 if self.player.exploding then
-                    table.remove(self.collisionBodies, CalculateListIndex(self.collisionBodies, self.player))
+                    table.remove(self.collisionBodies, ListIndex(self.collisionBodies, self.player))
                 end
                 
                 if self.player.exploded then

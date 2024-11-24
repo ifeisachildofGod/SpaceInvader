@@ -1,16 +1,45 @@
-
 love = require 'love'
-require 'calculate'
+local ui = require 'ui'
 
 DEBUGGING = true
-
-local Text = require 'ui'.text
--- local StatesMachine = require 'statesMachine'
-
 WorldDirection = {x=0, y=0}
 
-GRAVITATIONAL_CONSTANT = 67
 
+
+
+
+
+
+
+
+local stateMachineStates = {
+    'pause',
+    'normal',
+    'restart'
+}
+
+local baseFontSize = 60
+
+Fonts = {
+    h1 = love.graphics.newFont(baseFontSize),
+    h2 = love.graphics.newFont(baseFontSize - 10),
+    h3 = love.graphics.newFont(baseFontSize - 20),
+    h4 = love.graphics.newFont(baseFontSize - 30),
+    h5 = love.graphics.newFont(baseFontSize - 40),
+    h6 = love.graphics.newFont(baseFontSize - 50),
+    p = love.graphics.newFont(baseFontSize - 44),
+}
+
+
+
+function ListIndex(list, value)
+    for i, v in ipairs(list) do
+        if value == v then
+            return i
+        end
+    end
+    return -1
+end
 
 local function StateMachine(statesTbl)
     local self = {
@@ -37,7 +66,7 @@ end
 ---@param scrollThresh? integer
 ---@return table
 function Logger(loggerFilePath, scrollThresh)
-    local loggerOutput = Text(0, 0, 'p', {1, 1, 1})
+    local loggerOutput = ui.text(0, 0, 'p', {1, 1, 1})
     local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\SpaceInvader\\debug\\logger'
     local scollThreshold = scrollThresh or 15
 
@@ -146,32 +175,4 @@ function Logger(loggerFilePath, scrollThresh)
     }
 end
 
-PLAYER_DOCKING_DISTANCE = 100
-
-ASTROID_MIN_ALLOWED = 1
-ASTROID_MIN_RAD = 10
-ASTROID_MAX_RAD = 90
-ASTROID_MIN_SIDES = 5
-ASTROID_MAX_SIDES = 10
-ASTROID_MAX_VEL = 100
-ASTROID_DEFAULT_AMT = 3
-
-STATES = {
-    'pause',
-    'normal',
-    'restart'
-}
-
-local baseFontSize = 60
-
-Fonts = {
-    h1 = love.graphics.newFont(baseFontSize),
-    h2 = love.graphics.newFont(baseFontSize - 10),
-    h3 = love.graphics.newFont(baseFontSize - 20),
-    h4 = love.graphics.newFont(baseFontSize - 30),
-    h5 = love.graphics.newFont(baseFontSize - 40),
-    h6 = love.graphics.newFont(baseFontSize - 50),
-    p = love.graphics.newFont(baseFontSize - 44),
-}
-
-STATESMACHINE = StateMachine(STATES)
+STATESMACHINE = StateMachine(stateMachineStates)
