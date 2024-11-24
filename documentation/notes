@@ -1,0 +1,47 @@
+__________________________________________________________________________________________________________________________________________
+DONE
+__________________________________________________________________________________________________________________________________________
+1. Fix the player movement
+2. Fix the camera positioning
+3. The mouse control is still cursed you need to fix it
+4. Update the movement of the camera to be better suited to moving fast
+5. Find a way to make astroids collide with every thing in the world that moves
+6. Create a custom particle system
+7. Make the thrusters particles
+8. Find a way to make the player collide with planets and get destroyed
+9. Add reverse thrusters particle effects
+10. Fix the angle problem
+11. Fix the remove last line bug in the logger
+12. Find how to get the angular direction of the planets from either it's change in position
+13. Fix the dead turret bullet bug
+14. Make the rammers more accurate
+15. Make the undocking better
+16. Find the right variables for the good and bad versions of the player
+17. Find the right variables for the good and bad versions of the rammers
+18. Put related scripts in related files
+19. Make the mouse wheel control the speed of the player, add provisions in order to temporarily manage the speed feedback loop
+20. Refactor the code
+21. Fix the problem with the player getting destroyed when the world moves too fast
+____________
+RECENT
+____________
+
+__________________________________________________________________________________________________________________________________________
+__________________________________________________________________________________________________________________________________________
+NOT DONE
+__________________________________________________________________________________________________________________________________________
+Long Term
+__________________________________________________________________________________________________________________________________________
+1. **Find a way to make planets collide and get destroyed**
+2. **Make the player a bit more dynamic, come out of his ship, explore the planet and be chased by enemies on the planet**
+3. Make the game multiplayer compatible
+4. Make a mechanic for procedurally generated enemies and astroids and planets
+
+5. Do something with the UI script
+6. Add two new enemies
+__________________________________________________________________________________________________________________________________________
+Short Term
+__________________________________________________________________________________________________________________________________________
+
+__________________________________________________________________________________________________________________________________________
+__________________________________________________________________________________________________________________________________________
