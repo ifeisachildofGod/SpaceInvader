@@ -6,6 +6,7 @@ objects = {
     particleSystem = function (images)
         local CurrTime = 0
         local PrevTime = 0
+
         return {
             particles = {},
             
@@ -17,8 +18,8 @@ objects = {
             collisionBodies = {},
             scalingVariation = {min=0.5, max=1},
             particleSpeedRange = {min=12, max=20},
-            durationRange = {min=1, max=3},
-            particleOriginMaxOffset = 1,
+            durationRange = {min=1, max=1},
+            particleOriginMaxOffset = 0,
             dirAngleOffsetRange = nil,
             userUpdateCallback = nil,
             userDrawBeforeCallback = nil,
@@ -59,9 +60,9 @@ objects = {
                 local offsetAngle = math.rad(self.randomNumber(0, 360))
                 local speed = self.randomNumber(self.particleSpeedRange.min, self.particleSpeedRange.max)
 
-                local xOffset = math.cos(offsetAngle) * self.randomNumber(self.particleOriginMaxOffset)
-                local yOffset = -math.sin(offsetAngle) * self.randomNumber(self.particleOriginMaxOffset)
-
+                local xOffset = math.cos(offsetAngle) * self.randomNumber(0, self.particleOriginMaxOffset)
+                local yOffset = -math.sin(offsetAngle) * self.randomNumber(0, self.particleOriginMaxOffset)
+                
                 local x_dir = math.cos(angle) * speed
                 local y_dir = -math.sin(angle) * speed
 
@@ -182,7 +183,7 @@ objects = {
 
             ---@param min number
             ---@param max number
-            setScalingVariation = function (self, min, max)
+            setScaleRange = function (self, min, max)
                 self.scalingVariation.min = min
                 self.scalingVariation.max = max
             end,
@@ -238,6 +239,11 @@ objects = {
                 self.x = x
                 self.y = y
             end,
+            
+            ---@param offset number
+            setPositionOffsetStrength = function (self, offset)
+                self.particleOriginMaxOffset = offset
+            end,
 
             ---@param bodies table
             setCollisionBodies = function (self, bodies)
@@ -265,44 +271,63 @@ objects = {
     --- @param afterAnimation? fun(spriteInfo: table) Anything drawing related that occurs after the main animations
     --- @return table
     sprite = function (frames, pos, fps, updateFunction, beforeAnimation, afterAnimation)
-        local spriteInfo = {frames=frames, pos=pos, fps=fps, frameIndex=1, updateFunction=updateFunction, before=beforeAnimation, after=afterAnimation}
-        for frameIndex, _ in ipairs(spriteInfo.frames) do
-            if type(spriteInfo.frames[frameIndex]) == "string" then
-                spriteInfo.frames[frameIndex] = love.graphics.newImage(spriteInfo.frames[frameIndex])
-            end
-        end
+        local myFrames = {}
 
-        spriteInfo.draw = function (self)
-            if self.before ~= nil then
-                self:before()
-            end
+        local myFrameCurrFrame
+        for frameIndex, _ in ipairs(frames) do
+            myFrameCurrFrame = frames[frameIndex]
 
-            local finalFrames = self.frames
-            local position = self.pos
-
-            if #finalFrames then
-                local frameFPS = self.fps
-
-                self.frameIndex = (self.frameIndex + (DT * frameFPS)) % (#finalFrames + 1)
-                
-                local frame = finalFrames[math.floor(self.frameIndex)]
-                love.graphics.draw(frame, position.x, position.y, position.r or 0)
+            if type(myFrameCurrFrame) == "string" then
+                table.insert(myFrames, love.graphics.newImage(myFrameCurrFrame))
+            elseif type(myFrameCurrFrame) == "userdata" then
+                table.insert(myFrames, myFrameCurrFrame)
             else
-                love.graphics.draw(finalFrames[1], position.x, position.y, position.r or 0)
+                error('Invalid file type: '..type(myFrameCurrFrame))
             end
+        end
+
+        return {
+            frames = myFrames,
+            pos = pos,
+            fps = fps,
+            updateFunction = updateFunction,
+            before = beforeAnimation,
+            after = afterAnimation,
+
+            frameIndex = 1,
             
-            if self.after ~= nil then
-                self:after()
-            end
-        end
+            draw = function (self)
+                if self.before ~= nil then
+                    self:before()
+                end
 
-        spriteInfo.update = function(self)
-            if self.updateFunction ~= nil then
-                self:updateFunction()
-            end
-        end
+                local finalFrames = self.frames
+                local position = self.pos
 
-        return spriteInfo
+                if #finalFrames then
+                    local frameFPS = self.fps
+
+                    self.frameIndex = (self.frameIndex + (DT * frameFPS)) % (#finalFrames + 1)
+                    
+                    local frame = finalFrames[math.floor(self.frameIndex)]
+                    love.graphics.draw(frame, position.x, position.y, position.r or 0)
+                else
+                    love.graphics.draw(finalFrames[1], position.x, position.y, position.r or 0)
+                end
+                
+                if self.after ~= nil then
+                    self:after()
+                end
+            end,
+            
+            update = function(self)
+                if self.updateFunction ~= nil then
+                    self:updateFunction()
+                end
+                self.pos.x = self.pos.x + WorldDirection.x
+                self.pos.y = self.pos.y + WorldDirection.y
+            end
+        }
     end,
 
 

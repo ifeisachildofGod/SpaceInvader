@@ -33,7 +33,7 @@ function ListIndex(list, value)
     return -1
 end
 
-local function StateMachine(statesTbl)
+function StateMachine(statesTbl)
     local self = {
         setState = function (self, state)
             self.state = state
@@ -60,7 +60,7 @@ end
 function LoggerFunc(loggerFilePath, scrollThresh)
     local loggerOutput = ui.text(0, 0, 'p', {1, 1, 1})
     local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\SpaceInvader\\debug\\logger'
-    local scollThreshold = scrollThresh or 15
+    local scollThreshold = scrollThresh or 30
 
     local logger = {}
 
@@ -159,6 +159,6 @@ logger = LoggerFunc()
 logger:setLogPath(logger.loggerFilePath)
 logger:clearFile()
 
-logger:log('[Running] Love "'..debug.getinfo(1).source..'"')
+logger.log('[Running] Love "'..debug.getinfo(1).source..'"')
 
 STATESMACHINE = StateMachine(stateMachineStates)

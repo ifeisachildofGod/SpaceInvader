@@ -6,37 +6,34 @@ return {
     ---@param x number
     ---@param y number
     ---@param radius number
-    ---@param up? table
-    ---@param down? table
+    ---@param moveUpFunc fun(): boolean
+    ---@param moveDownFunc fun(): boolean
+    ---@param brakesFunc fun(): boolean
+    ---@param shootFunc fun(): boolean
     ---@param control? table|string
-    ---@param color? string
-    ---@param brake? table
+    ---@param color? table
     ---@param accelAccuracy? number
     ---@param turnSpeedAccuracy? number
     ---@param maxSpeedAccuracy? number
     ---@return table
-    playerVehicle = function (x, y, radius, color, control, up, down, brake, accelAccuracy, turnSpeedAccuracy, maxSpeedAccuracy)
-        local defaultAccuracy = 1
-        
-        accelAccuracy = accelAccuracy or defaultAccuracy
-        turnSpeedAccuracy = turnSpeedAccuracy or defaultAccuracy
-        maxSpeedAccuracy = maxSpeedAccuracy or defaultAccuracy
+    playerVehicle = function (x, y, radius, color, control, moveUpFunc, moveDownFunc, brakesFunc, shootFunc, accelAccuracy, turnSpeedAccuracy, maxSpeedAccuracy)
+        color = color or {1, 0.8, 0.5}
 
-        local MAX_SPEED = calculate.interpolation(100, 600, maxSpeedAccuracy)
-        local THRUSTER_ACCEL = calculate.interpolation(1, 3, accelAccuracy)
-        local THRUSTER_MAX_SPEED = calculate.interpolation(50, 150, maxSpeedAccuracy)
-        local MOUSE_TURN_SPEED = calculate.interpolation(0.04, 0.2, turnSpeedAccuracy)
+        accelAccuracy = accelAccuracy or 1
+        turnSpeedAccuracy = turnSpeedAccuracy or 1
+        maxSpeedAccuracy = maxSpeedAccuracy or 1
+
+        local THRUSTER_ACCEL = calculate.interpolation(0.1, 3, accelAccuracy)
+        local MOUSE_TURN_SPEED = calculate.interpolation(0.01, 0.2, turnSpeedAccuracy)
         local KEYBOARD_TURN_SPEED = calculate.interpolation(0.6, 2, turnSpeedAccuracy)
-        local ACCEL_RANGE = 200
-        local MOVEMENT_FRICTION = 0.02
-        local THRUSTER_DECCEL = 0.5
+        local ACCEL_RANGE = calculate.interpolation(1, 6, accelAccuracy)
         local BRAKE_FRICTION = 0.2
         local BULLET_VEL = 10
         local MAX_BULLETS_AMT = 15
         local EXPLODE_DUR = 2
         local FORWARD_THRUSTER_MAX_EMISSION = 50000
         local REVERSE_THRUSTER_MAX_EMISSION = 40000
-        local MASS_CONSTANT = 0.0000000000000000000001
+        local MASS_CONSTANT = 1e-11
         
         local movedUp = false
         local movedDown = false
@@ -72,13 +69,14 @@ return {
             angle = 0,
             radius = radius,
             mass = radius * MASS_CONSTANT,
-            color = color or {r = 1, g = 0.8, b = 0.5},
+            color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
             
-            up = up or {'up', 'w'},
-            down = down or {'down', 's'},
+            moveUpFunc = moveUpFunc,
+            moveDownFunc = moveDownFunc,
+            brakesFunc = brakesFunc,
+            shootFunc = shootFunc,
             right = right,
             left = left,
-            brake = brake or {2},
             mouseAngle = 0,
             yDirection = 0,
             dockedPlanet = nil,
@@ -88,25 +86,19 @@ return {
             destroyed = false,
             undocking = false,
 
-            MOUSE_TURN_SPEED = MOUSE_TURN_SPEED,
-            KEYBOARD_TURN_SPEED = KEYBOARD_TURN_SPEED,
-            MAX_BULLETS_AMT = MAX_BULLETS_AMT,
-            EXPLODE_DUR = EXPLODE_DUR,
-            COLLISION_VELOCITY = 100,
-            AUTO_DOCKING_DISTANCE = 100,
-
             gettingDestroyed = false,
             explodeTime = 0,
             undockingAngle = 0,
             continueUndocking = true,
+            accelAccelerator = 0.05,
             
             maxThrusterAccel = maxThrusterAccel,
             explosionParticles = explosionParticles,
 
             bullets = {},
-            thrust = {x=0, y=0, friction=MOVEMENT_FRICTION, maxSpeed=MAX_SPEED},
-            forwardThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = forwardThrusterParticles, accelAccelerator=9},
-            reverseThruster = {x=0, y=0, maxSpeed=THRUSTER_MAX_SPEED, accel=THRUSTER_ACCEL, deccel=THRUSTER_DECCEL, particles = reverseThrusterParticles},
+            thrust = {x=0, y=0, friction=0.02, maxSpeed=600},
+            forwardThruster = {x=0, y=0, accel=THRUSTER_ACCEL, deccel=0.5, particles = forwardThrusterParticles},
+            reverseThruster = {x=0, y=0, accel=THRUSTER_ACCEL, deccel=0.5, particles = reverseThrusterParticles},
             mainPlotPoints = {0, 0, 0, 0, 0, 0},
 
             -- Draw
@@ -166,14 +158,12 @@ return {
                 self:movePlayer()
 
                 self:updateParticles()
-                self:updateInput()
                 self:updateBullets()
                 self:updateExplosionProcedures()
             end,
 
             updateExplosionProcedures = function (self)
                 if self.gettingDestroyed then
-                    
                     if not updatedExplosion then
                         self.explosionParticles:setPosition(self.x, self.y)
                         self.explosionParticles:emitOnce(150)
@@ -196,59 +186,24 @@ return {
                 if not self.gettingDestroyed then
                     movedUp = false
                     movedDown = false
-                    
-                    local condition
 
                     if not self.docking then
-                        for _, ups in ipairs(self.up) do
-                            if type(ups) == "number" then
-                                condition = love.mouse.isDown(ups)
-                            elseif type(ups) == "string" then
-                                condition = love.keyboard.isDown(ups)
-                            else
-                                error('Invalid input constant '..ups)
-                            end
-                            
-                            if condition then
-                                self.yDirection = 1
-                                movedUp = true
-                                break
-                            end
+                        if self.moveUpFunc() then
+                            self.yDirection = 1
+                            movedUp = true
                         end
-                        
+
                         if not self.docked and not self.undocking then
-                            for _, downs in ipairs(self.down) do
-                                if type(downs) == "number" then
-                                    condition = love.mouse.isDown(downs)
-                                elseif type(downs) == "string" then
-                                    condition = love.keyboard.isDown(downs)
-                                else
-                                    error('Invalid input constant '..downs)
-                                end
-        
-                                if condition then
-                                    self.yDirection = -1
-                                    movedDown = true
-                                    break
-                                end
-                            end 
+                            if self.moveDownFunc() then
+                                self.yDirection = -1
+                                movedDown = true
+                            end
                         else
                             self:releaseReverseThrusters()
                         end
 
-                        for _, brakes in ipairs(self.brake) do
-                            if type(brakes) == "number" then
-                                condition = love.mouse.isDown(brakes)
-                            elseif type(brakes) == "string" then
-                                condition = love.keyboard.isDown(brakes)
-                            else
-                                error('Invalid input constant '..brakes)
-                            end
-        
-                            if condition then
-                                self:onBrakesPressed()
-                                break
-                            end
+                        if self.brakesFunc() then
+                            self:onBrakesPressed()
                         end
                     end
                     
@@ -259,9 +214,15 @@ return {
             
                             local dx = love.mouse.getX() - self.x
                             local dy = self.y - love.mouse.getY()
-                
-                            ---@diagnostic disable-next-line: deprecated
+
                             self.mouseAngle = self.mouseAngle - ((self.mouseAngle - ((math.deg(math.atan2(dy,dx)) - 90) % 360)) * mouseNormalization)
+                            
+                            -- if calculate.angleBetween(self.angle, self.mouseAngle) > 0 then
+                            --     self:turnPlayer(1)
+                            -- elseif calculate.angleBetween(self.angle, self.mouseAngle) < 0 then
+                            --     self:turnPlayer(-1)
+                            -- end
+
                             self.angle = calculate.angleLerp(self.angle, self.mouseAngle, MOUSE_TURN_SPEED)
                         else
                             for _, lefts in ipairs(self.left) do
@@ -280,23 +241,35 @@ return {
             
                         end
                     end
+
+                    if self.shootFunc() then
+                        if not self.shotBullet then
+                            self:addBullet()
+                            self.shotBullet = true
+                        end
+                    else
+                        self.shotBullet = false
+                    end
                 end
             end,
             
             updateParticles = function (self)
                 if not self.gettingDestroyed then
-                    self.forwardThruster.particles:setPosition(self.x + math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 4, self.y - math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 4)
-                    self.forwardThruster.particles:emitEverySecond(FORWARD_THRUSTER_MAX_EMISSION * math.sqrt((self.forwardThruster.y ^ 2) + (self.forwardThruster.x ^ 2)) / self.forwardThruster.maxSpeed)
-                    self.forwardThruster.particles:setAngleRange(self.angle - 10, self.angle + 10)
+                    local fwThrusterAngle = calculate.angle(self.forwardThruster.x, self.forwardThruster.y)
+                    local rvThrusterAngle = calculate.angle(self.reverseThruster.x, self.reverseThruster.y)
+                    
+                    self.forwardThruster.particles:setPosition(self.x + math.cos(math.rad((fwThrusterAngle - 90) % 360)) * self.radius / 2, self.y - math.sin(math.rad((fwThrusterAngle - 90) % 360)) * self.radius / 2)                    
+                    self.forwardThruster.particles:emitEverySecond(FORWARD_THRUSTER_MAX_EMISSION * calculate.distance(self.forwardThruster.x, self.forwardThruster.y) / self.thrust.maxSpeed)
+                    self.forwardThruster.particles:setAngleRange(fwThrusterAngle - 30 * 1+(self.forwardThruster.accel / self.maxThrusterAccel) * calculate.distance(self.forwardThruster.x, self.forwardThruster.y) / self.thrust.maxSpeed, fwThrusterAngle + 30 * 1+(self.forwardThruster.accel / self.maxThrusterAccel) * calculate.distance(self.forwardThruster.x, self.forwardThruster.y) / self.thrust.maxSpeed)
                     
                     self.forwardThruster.particles:update()
                     
-                    local forwardThrusterLeftX = self.x - (math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 2) - (math.cos(math.rad((self.angle) % 360)) * self.radius / 2)
-                    local forwardThrusterLeftY = self.y + (math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 2) + (math.sin(math.rad((self.angle) % 360)) * self.radius / 2)
-                    local forwardThrusterRightX = self.x - (math.cos(math.rad((self.angle - 90) % 360)) * self.radius / 2) + (math.cos(math.rad((self.angle) % 360)) * self.radius / 2)
-                    local forwardThrusterRightY = self.y + (math.sin(math.rad((self.angle - 90) % 360)) * self.radius / 2) - (math.sin(math.rad((self.angle) % 360)) * self.radius / 2)
-                    local emissionAmt = REVERSE_THRUSTER_MAX_EMISSION * math.sqrt((self.reverseThruster.y ^ 2) + (self.reverseThruster.x ^ 2)) / self.reverseThruster.maxSpeed
-                    self.reverseThruster.particles:setAngleRange((self.angle - 180) - 2, (self.angle - 180) + 2)
+                    local forwardThrusterLeftX = self.x - (math.cos(math.rad((rvThrusterAngle - 90) % 360)) * self.radius / 2) - (math.cos(math.rad((rvThrusterAngle) % 360)) * self.radius / 2)
+                    local forwardThrusterLeftY = self.y + (math.sin(math.rad((rvThrusterAngle - 90) % 360)) * self.radius / 2) + (math.sin(math.rad((rvThrusterAngle) % 360)) * self.radius / 2)
+                    local forwardThrusterRightX = self.x - (math.cos(math.rad((rvThrusterAngle - 90) % 360)) * self.radius / 2) + (math.cos(math.rad((rvThrusterAngle) % 360)) * self.radius / 2)
+                    local forwardThrusterRightY = self.y + (math.sin(math.rad((rvThrusterAngle - 90) % 360)) * self.radius / 2) - (math.sin(math.rad((rvThrusterAngle) % 360)) * self.radius / 2)
+                    local emissionAmt = REVERSE_THRUSTER_MAX_EMISSION * math.sqrt((self.reverseThruster.y ^ 2) + (self.reverseThruster.x ^ 2)) / self.thrust.maxSpeed
+                    self.reverseThruster.particles:setAngleRange((rvThrusterAngle - 180) - 2, (rvThrusterAngle - 180) + 2)
                     self.reverseThruster.particles:setPosition(forwardThrusterLeftX, forwardThrusterLeftY)
                     self.reverseThruster.particles:emitEverySecond(emissionAmt)
                     self.reverseThruster.particles:setPosition(forwardThrusterRightX, forwardThrusterRightY)
@@ -361,10 +334,7 @@ return {
                 end
 
                 if calculate.distance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 4 then
-                    self.undocked = true
-                    self.undocking = false
-                    self.docked = false
-                    self.dockedPlanet = nil
+                    self:undock()
                 end
             end,
 
@@ -378,6 +348,14 @@ return {
             startUndock = function (self)
                 self.undocking = true
                 self.docked = false
+
+            end,
+            
+            undock = function (self)
+                self.undocked = true
+                self.undocking = false
+                self.docked = false
+                self.dockedPlanet = nil
             end,
 
             -- Bullets
@@ -387,7 +365,7 @@ return {
 
             addBullet = function (self)
                 if not self.gettingDestroyed then
-                    if #self.bullets <= self.MAX_BULLETS_AMT then
+                    if #self.bullets <= MAX_BULLETS_AMT then
                         table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(self.angle + 90)), self.y - math.sin(math.rad(self.angle + 90)), self.angle, 3, BULLET_VEL))
                     end
                 end
@@ -396,7 +374,7 @@ return {
             -- Player moveement
             turnPlayer = function (self, dir)
                 if not self.gettingDestroyed then
-                    self.angle = self.angle + (self.KEYBOARD_TURN_SPEED * dir)
+                    self.angle = self.angle + (KEYBOARD_TURN_SPEED * dir)
                 end
             end,
             
@@ -444,11 +422,8 @@ return {
                             self.reverseThruster.y = -math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
                         end
                     end
-
-                    self.forwardThruster.x = self.forwardThruster.x * mouseNormalization
-                    self.forwardThruster.y = self.forwardThruster.y * mouseNormalization
-                    self.reverseThruster.x = self.reverseThruster.x * mouseNormalization
-                    self.reverseThruster.y = self.reverseThruster.y * mouseNormalization
+                    self.forwardThruster.x, self.forwardThruster.y = self.forwardThruster.x * mouseNormalization, self.forwardThruster.y * mouseNormalization
+                    self.reverseThruster.x, self.reverseThruster.y = self.reverseThruster.x * mouseNormalization, self.reverseThruster.y * mouseNormalization
                 end
             end,
 
@@ -503,8 +478,26 @@ return {
             end,
 
             -- Misc
+            removeEmissionCollisionPlanet = function (self, planet)
+                local particleIndex = ListIndex(self.explosionParticles.collisionBodies, planet)
+                if particleIndex ~= -1 then
+                    table.remove(self.explosionParticles.collisionBodies, particleIndex)
+                end
+                
+                particleIndex = ListIndex(self.forwardThruster.particles.collisionBodies, planet)
+                if particleIndex ~= -1 then
+                    table.remove(self.forwardThruster.particles.collisionBodies, particleIndex)
+                end
+
+                particleIndex = ListIndex(self.reverseThruster.particles.collisionBodies, planet)
+                if particleIndex ~= -1 then
+                    table.remove(self.reverseThruster.particles.collisionBodies, particleIndex)
+                end
+            end,
+
             addEmissionCollisionPlanet = function (self, planet)
                 local explosionContainsItAlready = false
+                
                 for _, body in ipairs(self.explosionParticles.collisionBodies) do
                     if body == planet then
                         explosionContainsItAlready = true
@@ -540,9 +533,9 @@ return {
             end,
             
             acceleratePlayer = function (self, dy)
-                self.forwardThruster.accel = calculate.clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE / self.forwardThruster.accelAccelerator), 0, self.maxThrusterAccel)
-                self.reverseThruster.accel = calculate.clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE / self.forwardThruster.accelAccelerator), 0, self.maxThrusterAccel)
-            end
+                self.forwardThruster.accel = calculate.clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE * self.accelAccelerator), 0, self.maxThrusterAccel)
+                self.reverseThruster.accel = calculate.clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE * self.accelAccelerator), 0, self.maxThrusterAccel)
+            end,
 
         }
     end,
@@ -550,11 +543,17 @@ return {
     ---@param x number
     ---@param y number
     ---@param radius number
-    ---@param planet table
+    ---@param planet? table
     ---@param color? table
+    ---@param moveRightFunc fun(): boolean
+    ---@param moveLeftFunc fun(): boolean
+    ---@param jumpFunc fun(): boolean
     ---@return table
-    player = function (x, y, radius, planet, color)
+    player = function (x, y, radius, planet, color, moveRightFunc, moveLeftFunc, jumpFunc)
         local MASS_CONSTANT = 100
+        
+        local prevPos = {x = x, y = y}
+        local currPos = {x = x, y = y}
 
         local explosionDur = 3
         local updatedExplosion = false
@@ -562,7 +561,10 @@ return {
         local explosionParticles = objects.particleSystem({{image=love.graphics.newImage('images/background.png'), width=10}})
         explosionParticles:setDurationRange(explosionDur / 2, explosionDur)
         explosionParticles:setSpeedRange(0.5, 1)
-        explosionParticles:addCollisionBody(planet)
+        if planet ~= nil then
+            explosionParticles:addCollisionBody(planet) 
+        end
+        
 
         color = color or {1, 0.4, 0.1}
         
@@ -573,12 +575,16 @@ return {
             y = y,
             radius = radius,
             mass = radius * MASS_CONSTANT,
-            angle = {displacement=0, velocity=0, acceleration=0.09, avgVelocity=400},
-            jump = {velocity=0, acceleration=0, targetAcceleration=6, terminalVelocity=20},
-            planetDisplacement = 0,
+            horizontal = {displacement=0, velocity=0, acceleration=0.09, avgVelocity=400},
+            vertical = {displacement=0, velocity=0, acceleration=0, targetAcceleration=2, terminalVelocity=20},
+            
+            moveRightFunc = moveRightFunc,
+            moveLeftFunc = moveLeftFunc,
+            jumpFunc = jumpFunc,
 
             onTheGround = true,
             gettingDestroyed = false,
+            hasSetDir = false,
             thrust = {x=0, y=0, speed=27, jumpVel=500, gravity=12},
             playersEdge = {x=0, y=0},
             planetsEdge = {x=0, y=0},
@@ -587,26 +593,67 @@ return {
             color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
             playerPlanetAngle = 0,
             explodeTime = 0,
+            inTheAir = false,
+            jumped = false,
+            canSetInTheAirVar = true,
             
             explosionParticles = explosionParticles,
             
             move = function (self)
-                self.jump.velocity = calculate.clamp(self.jump.velocity + self.jump.acceleration, -self.jump.terminalVelocity, self.jump.terminalVelocity)
-                self.planetDisplacement = self.planetDisplacement + self.jump.velocity
+                currPos.x, currPos.y = self.x, self.y
 
-                self.angle.displacement = (calculate.angle(self.planet.x, self.planet.y, self.x, self.y) - 90) + self.angle.velocity
-                self.angle.displacement = self.angle.displacement % 360
+                self.vertical.velocity = calculate.clamp(self.vertical.velocity + self.vertical.acceleration, -self.vertical.terminalVelocity, self.vertical.terminalVelocity)
+                self.vertical.displacement = self.vertical.displacement + self.vertical.velocity
+                
+                if self.vertical.displacement >= self.vertical.targetAcceleration then
+                    if self.canSetInTheAirVar then
+                        self.inTheAir = true
+                        self.canSetInTheAirVar = false
+                    end
+                else
+                    self.canSetInTheAirVar = true
+                end
+                
+                -- if self.vertical.displacement > math.sqrt(2 * self.gravity * self.planet.radius) * 10 then
+                --     self.planet = nil
+                -- end
+                
+                if self.planet ~= nil then
+                    self.horizontal.displacement = (calculate.angle(self.planet.x, self.planet.y, self.x, self.y) - 90) + self.horizontal.velocity
+                    self.horizontal.displacement = self.horizontal.displacement % 360
+                    
+                    self.planetsEdge.x = self.planet.x + math.cos(math.rad(self.horizontal.displacement + 180)) * (self.planet.radius + self.vertical.displacement)
+                    self.planetsEdge.y = self.planet.y - math.sin(math.rad(self.horizontal.displacement + 180)) * (self.planet.radius + self.vertical.displacement)
+                    self.playersEdge.x = -math.cos(math.rad(self.horizontal.displacement)) * self.radius
+                    self.playersEdge.y = math.sin(math.rad(self.horizontal.displacement)) * self.radius
+                    
+                    if not self.inTheAir then
+                        self.x = self.planetsEdge.x + self.playersEdge.x
+                        self.y = self.planetsEdge.y + self.playersEdge.y
+                        self.thrust.x = 0
+                        self.thrust.y = 0
+                        self.vertical.displacement = 0
+                    else
+                        self.vertical.acceleration = 0
+                        self.x = self.x + math.cos(math.rad(self.horizontal.displacement + 180)) * self.vertical.velocity
+                        self.y = self.y - math.sin(math.rad(self.horizontal.displacement + 180)) * self.vertical.velocity
+                    end
+                else
+                    if not self.hasSetDir then
+                        local dX = currPos.x - prevPos.x
+                        local dY = currPos.y - prevPos.y
+                        
+                        self.thrust.x = dX
+                        self.thrust.y = dY
 
-                self.planetsEdge.x = self.planet.x + math.cos(math.rad(self.angle.displacement + 180)) * (self.planet.radius + self.planetDisplacement)
-                self.planetsEdge.y = self.planet.y - math.sin(math.rad(self.angle.displacement + 180)) * (self.planet.radius + self.planetDisplacement)
-                self.playersEdge.x = -math.cos(math.rad(self.angle.displacement)) * self.radius
-                self.playersEdge.y = math.sin(math.rad(self.angle.displacement)) * self.radius
+                        self.hasSetDir = true
+                    end
+                end
                 
-                self.movementPosition.x = self.movementPosition.x + self.thrust.x * DT
-                self.movementPosition.y = self.movementPosition.y + self.thrust.y * DT
-                
-                self.x = self.planetsEdge.x + self.playersEdge.x
-                self.y = self.planetsEdge.y + self.playersEdge.y
+                self.x = self.x + self.thrust.x
+                self.y = self.y + self.thrust.y
+
+                prevPos.x, prevPos.y = self.x, self.y
             end,
             
             setPlanet = function (self, newPlanet)
@@ -618,12 +665,12 @@ return {
             end,
 
             movePlayerHorizontally = function (self, dir)
-                self.angle.velocity = calculate.lerp(self.angle.velocity, -self.angle.avgVelocity * dir / self.planet.radius, self.angle.acceleration)
+                self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, -self.horizontal.avgVelocity * dir / self.planet.radius, self.horizontal.acceleration)
             end,
             
             jumpUp = function (self)
                 self.onTheGround = false
-                self.jump.acceleration = self.jump.targetAcceleration
+                self.vertical.acceleration = self.vertical.targetAcceleration
             end,
 
             draw = function (self)
@@ -631,14 +678,12 @@ return {
                     love.graphics.setColor(self.color.r, self.color.g, self.color.b)
                     love.graphics.circle('fill', self.x, self.y, self.radius)
                 end
-
                 self.explosionParticles:draw()
             end,
 
             update = function (self)
                 if self.planet ~= nil then
                     self:move()
-                    self:updateInput()
                 end
                 self:updateExplosionProcedures()
             end,
@@ -670,33 +715,30 @@ return {
             end,
             
             updateInput = function (self)
-                local planetDistance = calculate.distance(self.x, self.y, self.planet.x, self.planet.y) - (self.radius + self.planet.radius) + 1
-
-                if love.keyboard.isDown('d') then
-                    self:movePlayerHorizontally(1 / planetDistance)
-                elseif love.keyboard.isDown('a') then
-                    self:movePlayerHorizontally(-1 / planetDistance)
-                else
-                    self.angle.velocity = calculate.lerp(self.angle.velocity, 0, self.angle.acceleration / planetDistance)
-                end
-
-                if not self.onTheGround then
-                    self.jump.acceleration = -self.gravity
-                    if self.planetDisplacement <= 0 then
-                        self.onTheGround = true
-                        self.jump.acceleration = 0
-                        self.jump.velocity = 0
-                        self.planetDisplacement = 0
+                if self.planet ~= nil and not self.gettingDestroyed then
+                    if self.moveRightFunc() then
+                        self:movePlayerHorizontally(1)
+                    elseif self.moveLeftFunc() then
+                        self:movePlayerHorizontally(-1)
+                    else
+                        self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.acceleration)
+                    end
+    
+                    if self.jumpFunc() then
+                        if not self.jumped and self.onTheGround then
+                            self:jumpUp()
+                            self.jumped = true
+                        end
+                    else
+                        self.jumped = false
                     end
                 end
-                if love.keyboard.isDown('w') and self.onTheGround then
-                    self:jumpUp()
-                end
-                
             end,
         }
-        
-        player:setPlanet(planet)
+
+        if planet ~= nil then
+            player:setPlanet(planet)
+        end
 
         return player
     end

@@ -3,32 +3,51 @@ require 'global'
 math.randomseed(os.time())
 
 local World = require 'world'
-local modes = require 'modes'
-local celestials = require 'collisionBodies.celestials'
 
-local function Init()
-    local worldCollisionBodies = {}
-    local worldPlanets = {celestials.planet(love.graphics.getWidth() / 2, (love.graphics.getHeight() / 2) + 110, {r=100/255, g=120/255, b=21/255}, 100, worldCollisionBodies)}--, celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 40, collisionBodies, 0.5)}
-    
-    for _, planet in ipairs(worldPlanets) do
-        table.insert(worldCollisionBodies, planet)
-    end
-    
-    local world = World(worldPlanets, worldCollisionBodies, modes.player)
-    
-    return world
-end
-
-local world = Init()
+local world = World()
 
 DT = 0
+
+local screenWidth = 800
+local screenHeight = 600
+
+local miniMapWidth = 200
+
+local miniMap = love.graphics.newCanvas(miniMapWidth, miniMapWidth * screenHeight / screenWidth)
+
+local screenScalingX = miniMap:getWidth() / screenWidth
+local screenScalingY = miniMap:getHeight() / screenHeight
+
+local screenScalingOffset = 0.2
+
+love.window.setMode(screenWidth, screenHeight)
+love.window.setTitle('Space Explorer')
 
 function love.load()
     love.graphics.setFont(Fonts['p'])
 end
 
+
 function love.draw()
-    world:draw(love.timer.getDelta())
+    -- love.graphics.setCanvas(miniMap)
+    -- love.graphics.clear()
+    -- love.graphics.push()
+    -- love.graphics.scale(screenScalingX * screenScalingOffset, screenScalingY * screenScalingOffset)
+    -- local translatedX, translatedY = -love.graphics.getWidth() * (screenScalingOffset - 1) / (2 * screenScalingOffset), -love.graphics.getHeight() * (screenScalingOffset - 1) / (2 * screenScalingOffset)
+    -- love.graphics.translate(translatedX, translatedY)
+    -- world:draw()
+    -- love.graphics.setLineWidth(2)
+    -- love.graphics.rectangle('line', -translatedX, -translatedY, love.graphics.getWidth() / screenScalingOffset, love.graphics.getHeight() / screenScalingOffset)
+    
+    -- love.graphics.pop()
+
+    -- love.graphics.setCanvas()
+    world:draw()
+    -- love.graphics.setColor(0, 0, 0)
+    -- love.graphics.rectangle('fill', 0, 0, miniMap:getWidth(), miniMap:getHeight())
+    -- love.graphics.setColor(1, 1, 1)
+    -- love.graphics.draw(miniMap, 0, 0)
+
     if DEBUGGING then
         love.graphics.setColor(1, 1, 1)
         love.graphics.printf(tostring(love.timer.getFPS()), love.graphics.getWidth() - 30, 10, love.graphics.getWidth(), 'left')
@@ -46,7 +65,7 @@ end
 function love.update(dt)
     DT = dt
     if STATESMACHINE.restart then
-        world = Init()
+        world = World()
         STATESMACHINE:setState('normal')
     else
         world:update()

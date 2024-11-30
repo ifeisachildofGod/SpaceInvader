@@ -3,7 +3,7 @@ local calculate = require 'calculate'
 local celestials = {}
 
 celestials = {
-    ASTROID_MIN_ALLOWED = 2,
+    ASTROID_MIN_ALLOWED = 0,
     ASTROID_MAX_RAD = 90,
     ASTROID_MIN_SIDES = 5,
     ASTROID_MAX_SIDES = 10,
@@ -12,11 +12,12 @@ celestials = {
 
     planet = function (x, y, color, radius, astroBodies, massConstant)
         local astroBodiesRef = astroBodies
-        local MASS_CONSTANT = massConstant or 0.00000001
+        local MASS_CONSTANT = massConstant or 1
         
         return {
             x = x,
             y = y,
+            planet = true,
             radius = radius,
             mass = radius * MASS_CONSTANT,
             astroBodies = astroBodiesRef,
@@ -30,9 +31,12 @@ celestials = {
 
             applyPhysics = function (self)
                 for _, body in ipairs(self.astroBodies) do
-                    if body ~= self then
-                        self.thrust.x, self.thrust.y, body.thrust.x, body.thrust.y = calculate.twoBodyThrust(self, body)
-                        
+                    if body ~= self and not body.tooFarAway then
+                        local thrust1, thrust2 = calculate.twoBodyThrust(self, body)
+
+                        self.thrust.x, self.thrust.y = thrust1.x, thrust1.y
+                        body.thrust.x, body.thrust.y = thrust2.x, thrust2.y
+
                         self.x = self.x + self.thrust.x * DT
                         self.y = self.y + self.thrust.y * DT
                         
@@ -43,10 +47,13 @@ celestials = {
             end,
 
             update = function (self)
-                self:applyPhysics()
+                if not self.tooFarAway then
+                    self:applyPhysics()
+                    self.mass = self.radius * MASS_CONSTANT
+                end
+                
                 self.x = self.x + WorldDirection.x
                 self.y = self.y + WorldDirection.y
-                self.mass = self.radius * MASS_CONSTANT
             end
         }
     end,
@@ -65,7 +72,7 @@ celestials = {
     ---@return table
     astroid = function (x, y, color, radius, noOfSides, minOffset, maxOffset, velRange, astroidAmt, world, angle)
         local VELOCITY = math.random(velRange)
-        local MASS_CONSTANT = 0.00000000005
+        local MASS_CONSTANT = 0.000000000000000005
 
         local myWorld = world
         local polygonPoints = {}
@@ -95,7 +102,7 @@ celestials = {
             destroy = function (self)
                 self.destroyed = true
 
-                local astroidsIndex = ListIndex(self.world.asteroids, self)
+                local astroidsIndex = ListIndex(self.world.astroids, self)
                 local charactersIndex = ListIndex(self.world.collisionBodies, self)
 
                 if astroidsIndex < 0 or charactersIndex < 0 then
@@ -112,24 +119,25 @@ celestials = {
                         local asty = self.y - math.sin(math.rad(newAngle + 90)) * (newRadius * 2)
                         
                         local astroid = celestials.astroid(astx,
-                                                asty,
-                                                self.color,
-                                                newRadius,
-                                                math.random(celestials.ASTROID_MIN_SIDES, celestials.ASTROID_MAX_SIDES),
-                                                -tonumber(newRadius / 5),
-                                                tonumber(newRadius / 5) or newRadius / 5,
-                                                celestials.ASTROID_MAX_VEL / 2,
-                                                self.astroidAmt,
-                                                self.world,
-                                                newAngle)
+                                                           asty,
+                                                           self.color,
+                                                           newRadius,
+                                                           math.random(celestials.ASTROID_MIN_SIDES, celestials.ASTROID_MAX_SIDES),
+                                                           -tonumber(newRadius / 5),
+                                                           tonumber(newRadius / 5) or newRadius / 5,
+                                                           celestials.ASTROID_MAX_VEL / 2,
+                                                           self.astroidAmt,
+                                                           self.world,
+                                                           newAngle
+                                                        )
                         
-                        table.insert(self.world.asteroids, astroid)
+                        table.insert(self.world.astroids, astroid)
                         table.insert(self.world.collisionBodies, astroid)
                     end
                 end
                 
                 table.remove(self.world.collisionBodies, charactersIndex)
-                table.remove(self.world.asteroids, astroidsIndex)
+                table.remove(self.world.astroids, astroidsIndex)
             end,
             
             draw = function (self)
@@ -147,9 +155,14 @@ celestials = {
             end,
 
             update = function (self)
-                self.x = WorldDirection.x + self.x + self.thrust.x * DT
-                self.y = WorldDirection.y + self.y + self.thrust.y * DT
-                self.mass = self.radius * MASS_CONSTANT
+                self.x = self.x + WorldDirection.x
+                self.y = self.y +WorldDirection.y
+                
+                if not self.tooFarAway then
+                    self.x = self.x + self.thrust.x * DT
+                    self.y = self.y + self.thrust.y * DT
+                    self.mass = self.radius * MASS_CONSTANT 
+                end
 
                 local indexIncrement = 0
                 for i = 1, noOfSides, 1 do

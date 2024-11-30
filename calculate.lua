@@ -65,6 +65,21 @@ calculate = {
     lerp = function (from, to, by)
         return from + (to - from) * by
     end,
+    
+    lineIntersection = function (x, y, radius, lx1, ly1, lx2, ly2)
+        local left = math.min(lx1, lx2)
+        local top = math.min(ly1, ly2)
+        local width = math.abs(lx2 - lx1)
+        local height = math.abs(ly2 - ly1)
+
+        local xComparison = (left < x and x < left + width) or (left < x + radius and x + width < left + width)
+        local yComparison = (top < y and y < top + height) or (top < y + radius and y + height < top + height)
+        
+        if xComparison and yComparison then
+            return true
+        end
+        return false
+    end,
 
     angleLerp = function (from, to, by)
         return (from + calculate.angleBetween(from, to) * by) % 360
@@ -72,6 +87,28 @@ calculate = {
     
     gravity = function (mass, radius)
         return calculate.GRAVITATIONAL_CONSTANT * mass / radius^2
+    end,
+    
+    ---@overload fun(x: number, y: number)
+    ---@overload fun(angle: number)
+    ---@param x1 number
+    ---@param y1 number
+    ---@param x2 number
+    ---@param y2 number
+    ---@return number
+    ---@return number
+    direction = function (x1, y1, x2, y2)
+        local angle
+
+        if x2 then
+            angle = calculate.angle(x2 - x1, y2 - y1)
+        elseif y1 then
+            angle = calculate.angle(x1, x2)
+        else
+            angle = x1
+        end
+
+        return math.cos(math.rad(angle + 90)), -math.sin(math.rad(angle + 90))
     end,
 
     -- Both arguements must have x, y and radius
@@ -102,10 +139,8 @@ calculate = {
     -- Both arguements must have x, y and radius
     ---@param staticBody table
     ---@param satelliteBody table
-    ---@return number
-    ---@return number
-    ---@return number
-    ---@return number
+    ---@return table
+    ---@return table
     twoBodyThrust = function (staticBody, satelliteBody)
         local satelliteBodyFx, satelliteBodyFy =  calculate.twoBodyVector(staticBody, satelliteBody)
         
@@ -120,7 +155,7 @@ calculate = {
         -- staticBody.x = staticBody.x + staticBody.thrust.x * DT
         -- staticBody.y = staticBody.y + staticBody.thrust.y * DT
 
-        return staticBody.thrust.x, staticBody.thrust.y, satelliteBody.thrust.x, satelliteBody.thrust.y
+        return staticBody.thrust, satelliteBody.thrust
     end,
 
     ---@param min number
