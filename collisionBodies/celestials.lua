@@ -12,7 +12,7 @@ celestials = {
 
     planet = function (x, y, color, radius, astroBodies, massConstant)
         local astroBodiesRef = astroBodies
-        local MASS_CONSTANT = massConstant or 1
+        local MASS_CONSTANT = massConstant or 5
         
         return {
             x = x,

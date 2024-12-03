@@ -2,16 +2,19 @@ local objects = require 'objects'
 local calculate = require 'calculate'
 local accecories = require 'accecories'
 
+local BULLET_VEL = 10
+local MAX_BULLETS_AMT = 15
+
 return {
     ---@param x number
     ---@param y number
     ---@param radius number
+    ---@param color? table
+    ---@param control string|table
     ---@param moveUpFunc fun(): boolean
     ---@param moveDownFunc fun(): boolean
     ---@param brakesFunc fun(): boolean
     ---@param shootFunc fun(): boolean
-    ---@param control? table|string
-    ---@param color? table
     ---@param accelAccuracy? number
     ---@param turnSpeedAccuracy? number
     ---@param maxSpeedAccuracy? number
@@ -28,8 +31,6 @@ return {
         local KEYBOARD_TURN_SPEED = calculate.interpolation(0.6, 2, turnSpeedAccuracy)
         local ACCEL_RANGE = calculate.interpolation(1, 6, accelAccuracy)
         local BRAKE_FRICTION = 0.2
-        local BULLET_VEL = 10
-        local MAX_BULLETS_AMT = 15
         local EXPLODE_DUR = 2
         local FORWARD_THRUSTER_MAX_EMISSION = 50000
         local REVERSE_THRUSTER_MAX_EMISSION = 40000
@@ -37,7 +38,7 @@ return {
         
         local movedUp = false
         local movedDown = false
-        local right, left
+        local moveRightFunc, moveLeftFunc
         local mouseNormalization = 1
 
         local updatedExplosion = false
@@ -52,13 +53,14 @@ return {
         
         local reverseThrusterParticles = objects.particleSystem({{image=love.graphics.newImage('images/particle.png'), width=5}})
         reverseThrusterParticles:setDurationRange(1, 2)
-
+        
         if type(control) == 'table' then
-            right = control.right
-            left = control.left
-        elseif type(control) == "nil" then
-            right = {'right', 'd'}
-            left = {'left', 'a'}
+            if type(control.right) == 'function' and type(control.left) == 'function' then
+                moveRightFunc = control.right
+                moveLeftFunc = control.left
+            else
+                error('Invalid control parameter')
+            end
         elseif control ~= 'mouse' then
             error('Invalid control parameter')
         end
@@ -75,8 +77,8 @@ return {
             moveDownFunc = moveDownFunc,
             brakesFunc = brakesFunc,
             shootFunc = shootFunc,
-            right = right,
-            left = left,
+            moveRightFunc = moveRightFunc,
+            moveLeftFunc = moveLeftFunc,
             mouseAngle = 0,
             yDirection = 0,
             dockedPlanet = nil,
@@ -148,15 +150,16 @@ return {
 
             -- Update
             update = function (self)
-                self.thrust.x = calculate.clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
-                self.thrust.y = calculate.clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
-                
-                if not self.undocked then
-                    self:updateDockingProcedure()
+                if not (self.gettingDestroyed or self.destroyed) then
+                    self.thrust.x = calculate.clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+                    self.thrust.y = calculate.clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
+                    
+                    if not self.undocked then
+                        self:updateDockingProcedure()
+                    end
+    
+                    self:movePlayer()
                 end
-
-                self:movePlayer()
-
                 self:updateParticles()
                 self:updateBullets()
                 self:updateExplosionProcedures()
@@ -211,34 +214,18 @@ return {
                         if control == 'mouse' then
                             local normalizationCenterOffset = radius / 2
                             mouseNormalization = math.min((calculate.distance(love.mouse.getX(), love.mouse.getY(), self.x, self.y)) / normalizationCenterOffset, 1)
-            
-                            local dx = love.mouse.getX() - self.x
-                            local dy = self.y - love.mouse.getY()
 
-                            self.mouseAngle = self.mouseAngle - ((self.mouseAngle - ((math.deg(math.atan2(dy,dx)) - 90) % 360)) * mouseNormalization)
+                            self.mouseAngle = self.mouseAngle - (self.mouseAngle - calculate.angle(self.x, self.y, love.mouse.getX(), love.mouse.getY()) * mouseNormalization)
                             
-                            -- if calculate.angleBetween(self.angle, self.mouseAngle) > 0 then
-                            --     self:turnPlayer(1)
-                            -- elseif calculate.angleBetween(self.angle, self.mouseAngle) < 0 then
-                            --     self:turnPlayer(-1)
-                            -- end
-
                             self.angle = calculate.angleLerp(self.angle, self.mouseAngle, MOUSE_TURN_SPEED)
                         else
-                            for _, lefts in ipairs(self.left) do
-                                if love.keyboard.isDown(lefts)then
-                                    self:turnPlayer(1)
-                                    break
-                                end
+                            if self.moveLeftFunc() then
+                                self:turnPlayer(1)
                             end
-            
-                            for _, rights in ipairs(self.right) do
-                                if love.keyboard.isDown(rights)then
-                                    self:turnPlayer(-1)
-                                    break
-                                end
+
+                            if self.moveRightFunc() then
+                                self:turnPlayer(-1)
                             end
-            
                         end
                     end
 
@@ -281,13 +268,11 @@ return {
             end,
 
             updateBullets = function (self)
-                if #self.bullets > 0 then
-                    for index, bullet in ipairs(self.bullets) do
-                        if bullet:getDist() > love.graphics.getWidth() * 1.5 then
-                            self:removeBullet(index)
-                        else
-                            bullet:update(WorldDirection)
-                        end
+                for index, bullet in ipairs(self.bullets) do
+                    if bullet.dist > calculate.distance(love.graphics.getWidth(), love.graphics.getHeight()) then
+                        self:removeBullet(index)
+                    else
+                        bullet:update()
                     end
                 end
             end,
@@ -359,16 +344,17 @@ return {
             end,
 
             -- Bullets
-            removeBullet = function (self, index)
-                table.remove(self.bullets, index)
-            end,
-
+            
             addBullet = function (self)
                 if not self.gettingDestroyed then
                     if #self.bullets <= MAX_BULLETS_AMT then
                         table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(self.angle + 90)), self.y - math.sin(math.rad(self.angle + 90)), self.angle, 3, BULLET_VEL))
                     end
                 end
+            end,
+            
+            removeBullet = function (self, index)
+                table.remove(self.bullets, index)
             end,
 
             -- Player moveement
@@ -543,13 +529,16 @@ return {
     ---@param x number
     ---@param y number
     ---@param radius number
+    ---@param control table
     ---@param planet? table
     ---@param color? table
-    ---@param moveRightFunc fun(): boolean
-    ---@param moveLeftFunc fun(): boolean
-    ---@param jumpFunc fun(): boolean
+    ---@param jumpFunc? fun(): boolean
+    ---@param shootFunc? fun(): boolean
     ---@return table
-    player = function (x, y, radius, planet, color, moveRightFunc, moveLeftFunc, jumpFunc)
+    player = function (x, y, radius, control, planet, color, jumpFunc, shootFunc)
+        jumpFunc = jumpFunc or function () return false end
+        shootFunc = shootFunc or function () return false end
+
         local MASS_CONSTANT = 100
         
         local prevPos = {x = x, y = y}
@@ -565,23 +554,44 @@ return {
             explosionParticles:addCollisionBody(planet) 
         end
         
-
         color = color or {1, 0.4, 0.1}
+        
+        local moveUpFunc, moveDownFunc, moveRightFunc, moveLeftFunc
+
+        if type(control.up) == 'function' then
+            moveUpFunc = control.up
+            moveDownFunc = control.down
+        elseif type(control.right) == 'function' and type(control.left) == 'function' then
+            moveRightFunc = control.right
+            moveLeftFunc = control.left
+        else
+            error('Invalid control parameter')
+        end
         
         local player = {}
 
         player = {
+            BULLET_VEL = 10,
+
             x = x,
             y = y,
             radius = radius,
             mass = radius * MASS_CONSTANT,
-            horizontal = {displacement=0, velocity=0, acceleration=0.09, avgVelocity=400},
+            angle = 0,
+            
+            bullets = {},
+
+            horizontal = {displacement=0, velocity=0, acceleration=2, avgVelocity=400, decceleration=0.5},
             vertical = {displacement=0, velocity=0, acceleration=0, targetAcceleration=2, terminalVelocity=20},
             
+            moveUpFunc = moveUpFunc,
+            moveDownFunc = moveDownFunc,
             moveRightFunc = moveRightFunc,
             moveLeftFunc = moveLeftFunc,
             jumpFunc = jumpFunc,
+            shootFunc = shootFunc,
 
+            shotBullet = false,
             onTheGround = true,
             gettingDestroyed = false,
             hasSetDir = false,
@@ -655,7 +665,42 @@ return {
 
                 prevPos.x, prevPos.y = self.x, self.y
             end,
+
+            drawBullets = function (self)
+                if #self.bullets > 0 then
+                    for _, bullet in ipairs(self.bullets) do
+                        bullet:draw()
+                    end
+                end
+            end,
+
+            updateBullets = function (self)
+                for index, bullet in ipairs(self.bullets) do
+                    if bullet.dist > love.graphics.getWidth() * 2 then
+                        self:removeBullet(index)
+                    else
+                        if self.planet ~= nil then
+                            local Fx = -self.gravity * math.cos(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90))
+                            local Fy = self.gravity * math.sin(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90))
+                            
+                            bullet.thrust.x = bullet.thrust.x + Fx
+                            bullet.thrust.y = bullet.thrust.y + Fy
+                        end
+                        bullet:update()
+                    end
+                end
+            end,
             
+            removeBullet = function (self, index)
+                table.remove(self.bullets, index)
+            end,
+            
+            addBullet = function (self, angle)
+                if not self.gettingDestroyed then
+                    table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle, 3, BULLET_VEL))
+                end
+            end,
+
             setPlanet = function (self, newPlanet)
                 self.planet = newPlanet
                 -- if ListIndex(self.planet.astroBodies, self) == -1 then
@@ -679,18 +724,19 @@ return {
                     love.graphics.circle('fill', self.x, self.y, self.radius)
                 end
                 self.explosionParticles:draw()
+                self:drawBullets()
             end,
 
             update = function (self)
-                if self.planet ~= nil then
+                if self.planet ~= nil and not (self.gettingDestroyed or self.destroyed) then
                     self:move()
                 end
                 self:updateExplosionProcedures()
+                self:updateBullets()
             end,
             
             destroy = function (self)
                 self.gettingDestroyed = true
-                self.radus = 1
             end,
 
             updateExplosionProcedures = function (self)
@@ -716,12 +762,36 @@ return {
             
             updateInput = function (self)
                 if self.planet ~= nil and not self.gettingDestroyed then
-                    if self.moveRightFunc() then
-                        self:movePlayerHorizontally(1)
-                    elseif self.moveLeftFunc() then
-                        self:movePlayerHorizontally(-1)
+                    if self.moveUpFunc ~= nil and self.moveDownFunc ~= nil then
+                        local moveUp, upAngle = self:moveUpFunc()
+                        local moveDown, downAngle = self:moveDownFunc()
+                        
+                        self.angle = upAngle
+
+                        if moveUp then
+                            self:movePlayerHorizontally(math.sin(math.rad(upAngle)))
+                        else
+                            self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
+                        end
+                        
+                        if moveDown then
+                            self:movePlayerHorizontally(-math.sin(math.rad(downAngle)))
+                        else
+                            self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
+                        end
+                    elseif self.moveRightFunc ~= nil and self.moveLeftFunc ~= nil then
+                        if self.moveRightFunc() then
+                            self:movePlayerHorizontally(1)
+                            self.angle = 90
+                        elseif self.moveLeftFunc() then
+                            self:movePlayerHorizontally(-1)
+                            self.angle = -90
+                        else
+                            self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
+                            self.angle = 0
+                        end
                     else
-                        self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.acceleration)
+                        error('Wrong arguments were passed in for the functions either moveUpFunc, moveRightFunc or moveLeftFunc')
                     end
     
                     if self.jumpFunc() then
@@ -731,6 +801,16 @@ return {
                         end
                     else
                         self.jumped = false
+                    end
+                    
+                    local shot, shootingAngle = self:shootFunc()
+                    if shot then
+                        if not self.shotBullet then
+                            self:addBullet(shootingAngle - 90)
+                            self.shotBullet = true
+                        end
+                    else
+                        self.shotBullet = false
                     end
                 end
             end,

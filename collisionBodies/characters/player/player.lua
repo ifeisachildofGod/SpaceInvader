@@ -1,6 +1,7 @@
 local wrappers = require 'collisionBodies.characters.player.wrappers'
 local calculate = require 'calculate'
 local playerModes = require 'collisionBodies.characters.player.modes'
+local accecories = require 'accecories'
 
 local CAMERAFOCUSACCEL = 1
 
@@ -32,12 +33,52 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
             return false
         end
     end
+    
+    local characterMoveFunc = function (...)
+        local func = inputFunc(...)
+        return function (self)
+            return func(), calculate.angle(love.mouse.getX(), love.mouse.getY(), self.x, self.y)
+        end
+    end
+    
+    local characterShootFunc = function (...)
+        local func = inputFunc(...)
+        return function (self)
+            return func(), calculate.angle(love.mouse.getX(), love.mouse.getY(), self.x, self.y)
+        end
+    end
 
     local playerSpacecraft = playerModes.playerVehicle(love.graphics.getWidth() / 2, love.graphics.getHeight() / 2, 20, nil, 'mouse', inputFunc('up', 'w'), inputFunc('down', 's'), inputFunc(2, 'z'), inputFunc(1, 'space'))
-    local playerCharacter = playerModes.player(playerSpacecraft.x, playerSpacecraft.y, 7, nil, nil, inputFunc('d'), inputFunc('a'), inputFunc('w'))
+    local playerCharacter = playerModes.player(playerSpacecraft.x, playerSpacecraft.y, 7, {up = characterMoveFunc('w'), down = characterMoveFunc('s')}, nil, nil, inputFunc('x'), characterShootFunc('space', 1))
 
     local CameraRefPrev = {x=playerCharacter.x, y=playerCharacter.y}
     local CameraRefCurr = {x=playerCharacter.x, y=playerCharacter.y}
+
+    playerCharacter.addBullet = function (self, angle)
+        if not self.gettingDestroyed then
+            local bullet = accecories.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle - 90, 3, self.BULLET_VEL)
+            
+            bullet.update = function (b)
+                if self.planet then
+                    local d = calculate.distance(b.x, b.y, self.planet.x, self.planet.y)
+                    
+                    local Fx = -self.gravity * math.cos(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90)) / d^2
+                    local Fy = self.gravity * math.sin(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90)) / d^2
+                    
+                    b.thrust.x = b.thrust.x + Fx
+                    b.thrust.y = b.thrust.y + Fy
+                        
+                end
+                
+                b.x = WorldDirection.x + b.x + b.thrust.x
+                b.y = WorldDirection.y + b.y + b.thrust.y
+                
+                b.dist = b.dist + calculate.distance(b.thrust.x, b.thrust.y)
+            end
+
+            table.insert(playerSpacecraft.bullets, bullet)
+        end
+    end
 
     return {
         player = (modes.spacecraft and playerSpacecraft) or playerCharacter,
@@ -50,6 +91,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
         astroids = astroids,
         collisionBodies = collisionBodies,
         planets = planets,
+        prevCharactersBulletAmt = 0,
         
         mousePressed = function (self, mouseCode)
             if mouseCode == 2 then
@@ -108,9 +150,15 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
         end,
 
         update = function (self)
+            if #self.character.player.bullets ~= self.prevCharactersBulletAmt then
+                table.insert(self.spacecraft.player.bullets, self.character.player.bullets[#self.character.player.bullets])
+                self.prevCharactersBulletAmt = #self.character.player.bullets
+            end
+            
             if self.modes.spacecraft then
+                self.character.player.planet = nil
                 self.player = self.spacecraft.player
-            else
+            elseif self.modes.character then
                 self.player = self.character.player
             end
 

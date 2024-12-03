@@ -18,7 +18,7 @@ local miniMap = love.graphics.newCanvas(miniMapWidth, miniMapWidth * screenHeigh
 local screenScalingX = miniMap:getWidth() / screenWidth
 local screenScalingY = miniMap:getHeight() / screenHeight
 
-local screenScalingOffset = 0.2
+local screenScalingOffset = 0.15
 
 love.window.setMode(screenWidth, screenHeight)
 love.window.setTitle('Space Explorer')
@@ -29,24 +29,27 @@ end
 
 
 function love.draw()
-    -- love.graphics.setCanvas(miniMap)
-    -- love.graphics.clear()
-    -- love.graphics.push()
-    -- love.graphics.scale(screenScalingX * screenScalingOffset, screenScalingY * screenScalingOffset)
-    -- local translatedX, translatedY = -love.graphics.getWidth() * (screenScalingOffset - 1) / (2 * screenScalingOffset), -love.graphics.getHeight() * (screenScalingOffset - 1) / (2 * screenScalingOffset)
-    -- love.graphics.translate(translatedX, translatedY)
-    -- world:draw()
-    -- love.graphics.setLineWidth(2)
-    -- love.graphics.rectangle('line', -translatedX, -translatedY, love.graphics.getWidth() / screenScalingOffset, love.graphics.getHeight() / screenScalingOffset)
-    
-    -- love.graphics.pop()
-
-    -- love.graphics.setCanvas()
+    love.graphics.setCanvas(miniMap)
+    love.graphics.clear()
+    love.graphics.push()
+    love.graphics.scale(screenScalingX * screenScalingOffset, screenScalingY * screenScalingOffset)
+    local translatedX, translatedY = -love.graphics.getWidth() * (screenScalingOffset - 1) / (2 * screenScalingOffset), -love.graphics.getHeight() * (screenScalingOffset - 1) / (2 * screenScalingOffset)
+    love.graphics.translate(translatedX, translatedY)
     world:draw()
-    -- love.graphics.setColor(0, 0, 0)
-    -- love.graphics.rectangle('fill', 0, 0, miniMap:getWidth(), miniMap:getHeight())
-    -- love.graphics.setColor(1, 1, 1)
-    -- love.graphics.draw(miniMap, 0, 0)
+    love.graphics.setLineWidth(4)
+    love.graphics.rectangle('line', -translatedX, -translatedY, love.graphics.getWidth() / screenScalingOffset, love.graphics.getHeight() / screenScalingOffset)
+    
+    love.graphics.pop()
+
+    love.graphics.setCanvas()
+    love.graphics.setColor(1, 1, 1)
+    world:draw()
+    love.graphics.setColor(0, 0, 0)
+    love.graphics.rectangle('fill', 0, 0, miniMap:getWidth(), miniMap:getHeight())
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.draw(miniMap, 0, 0)
+    logger.write()
+    logger:DEBUG()
 
     if DEBUGGING then
         love.graphics.setColor(1, 1, 1)

@@ -84,7 +84,21 @@ calculate = {
     angleLerp = function (from, to, by)
         return (from + calculate.angleBetween(from, to) * by) % 360
     end,
-    
+
+    ---@param x1 number
+    ---@param y1 number
+    ---@param x2 number
+    ---@param y2 number
+    ---@param pointX number
+    ---@param pointY number
+    ---@return number
+    angleBetweenAPoint = function (x1, y1, x2, y2, pointX, pointY)
+        local angle1 = calculate.angle(x1, y1, pointX, pointY)
+        local angle2 = calculate.angle(x2, y2, pointX, pointY)
+        
+        return calculate.angleBetween(angle1, angle2) 
+    end,
+
     gravity = function (mass, radius)
         return calculate.GRAVITATIONAL_CONSTANT * mass / radius^2
     end,

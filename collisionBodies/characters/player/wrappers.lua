@@ -40,28 +40,28 @@ return {
             end,
 
             updatePlayerBullet = function (self)
-                for bulletIndex, bullet in ipairs(self.player.bullets) do
+                for index, bullet in ipairs(self.player.bullets) do
                     for _, planet in ipairs(self.planets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
-                            table.remove(self.player.bullets, bulletIndex)
+                            self.player:removeBullet(index)
                         end
                     end
                 end
             end,
             
             updatePlayerInPlanets = function (self, planet)
-                local distance = calculate.distance(planet.x, planet.y, self.player.x, self.player.y)
-                local touchDown = distance <= planet.radius + self.player.radius
-                
-                if not self.player.destroyed then
-                    self.player:addEmissionCollisionPlanet(planet)
-
-                    local angle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y) % 360
-                    local dAngle = math.abs(self.player.angle - angle)
-
-                    if touchDown then
-                        if not self.player.docked then
-                            if dAngle >= 30 or math.sqrt(self.player.thrust.x^2 + self.player.thrust.y^2) > COLLISION_VELOCITY then
+                if not self.player.docked then
+                    local distance = calculate.distance(planet.x, planet.y, self.player.x, self.player.y)
+                    local touchDown = distance <= planet.radius + self.player.radius
+                    
+                    if not self.player.destroyed then
+                        self.player:addEmissionCollisionPlanet(planet)
+    
+                        local angle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y)
+                        local dAngle = math.abs(calculate.angleBetween(self.player.angle, angle))
+                        
+                        if touchDown then
+                            if dAngle >= 20 or math.sqrt(self.player.thrust.x^2 + self.player.thrust.y^2) > COLLISION_VELOCITY then
                                 self.player:destroy()
                             else
                                 self:playerDocked(planet)

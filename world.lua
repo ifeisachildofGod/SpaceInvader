@@ -17,7 +17,7 @@ local function WorldWrapper()
     local astroids = {}
     local collisionBodies = {}
     local planets = {
-        celestials.planet(love.graphics.getWidth() / 2, (love.graphics.getHeight() / 2) + 200, {r=100/255, g=120/255, b=21/255}, 50, collisionBodies),
+        celestials.planet(love.graphics.getWidth() / 2, (love.graphics.getHeight() / 2) + 1000, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
         -- celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 200, collisionBodies)
     }
     
@@ -67,8 +67,8 @@ local function WorldWrapper()
         astroids = astroids,
         destroyedPlanets = {},
         
-        nearestOptimizationDistance = 1.5 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
-        farthestOptimizationDistance = 2 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
+        nearestOptimizationDistance = 2 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
+        farthestOptimizationDistance = 3 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
         charactersActivated = false,
 
         keyPressed = function (self, key)
@@ -134,7 +134,7 @@ local function WorldWrapper()
                     if character.bullets ~= nil then
                         for bulletIndex, bullet in ipairs(character.bullets) do
                             if calculate.distance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius and ListIndex(self.astroids, astroid) ~= -1 then
-                                table.remove(character.bullets, bulletIndex)
+                                character:removeBullet(bulletIndex)
                                 astroid:destroy()
                             end
                         end
@@ -159,7 +159,7 @@ local function WorldWrapper()
                 for _, stationaryGunner in ipairs(self.stationaryGunners) do
                     for bulletIndex, bullet in ipairs(stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
-                            table.remove(stationaryGunner.bullets, bulletIndex)
+                            stationaryGunner:removeBullet(bulletIndex)
                         end 
                     end
                 end
@@ -167,7 +167,7 @@ local function WorldWrapper()
                 for _, kamikazeeGunner in ipairs(self.kamikazeeGunners) do
                     for bulletIndex, bullet in ipairs(kamikazeeGunner.stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
-                            table.remove(kamikazeeGunner.stationaryGunner.bullets, bulletIndex)
+                            kamikazeeGunner.stationaryGunner:removeBullet(bulletIndex)
                         end 
                     end
                 end
@@ -175,7 +175,7 @@ local function WorldWrapper()
                 for _, fighter in ipairs(self.fighters) do
                     for bulletIndex, bullet in ipairs(fighter.stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
-                            table.remove(fighter.stationaryGunner.bullets, bulletIndex)
+                            fighter.stationaryGunner:removeBullet(bulletIndex)
                         end 
                     end
                 end
@@ -256,8 +256,6 @@ local function WorldWrapper()
             self.player:draw()
             
             self.userInterface:draw()
-            logger.write()
-            logger:DEBUG()
         end,
 
         update = function (self)
@@ -266,6 +264,8 @@ local function WorldWrapper()
             if not STATESMACHINE.pause then
                 environment.update()
                 
+                self.player:update()
+
                 self:updatePlanets()
 
                 if self.charactersActivated or not DEBUGGING then
@@ -306,15 +306,13 @@ local function WorldWrapper()
                         fighter.character.x = fighter.character.x + WorldDirection.x
                         fighter.character.y = fighter.character.y + WorldDirection.y
 
-                        for _, bullet in ipairs(fighter.bullets) do
+                        for _, bullet in ipairs(fighter.stationaryGunner.bullets) do
                             bullet.x = bullet.x + WorldDirection.x
                             bullet.y = bullet.y + WorldDirection.y
                         end
                     end
                 end
                 self:updateAstroid()
-
-                self.player:update()
                 
                 self.mouseZoomDistanceX = love.mouse.getX() - love.graphics.getWidth() / 2
                 self.mouseZoomDistanceY = love.mouse.getY() - love.graphics.getHeight() / 2
