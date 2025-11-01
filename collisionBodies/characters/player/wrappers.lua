@@ -1,4 +1,4 @@
-local calculate = require 'calculate'
+local calculate   =   require 'calculate'
 
 return {
     
@@ -10,10 +10,7 @@ return {
     ---@param collisionBodies table
     ---@return table
     spacecraft = function (player, kamikazees, stationaryGunners, kamikazeeGunners, planets, collisionBodies)
-        local COLLISION_VELOCITY = 100
         local AUTO_DOCKING_DISTANCE = 100
-        
-        table.insert(collisionBodies, player)
         
         return {
             player = player,
@@ -48,35 +45,6 @@ return {
                     end
                 end
             end,
-            
-            updatePlayerInPlanets = function (self, planet)
-                if not self.player.docked then
-                    local distance = calculate.distance(planet.x, planet.y, self.player.x, self.player.y)
-                    local touchDown = distance <= planet.radius + self.player.radius
-                    
-                    if not self.player.destroyed then
-                        self.player:addEmissionCollisionPlanet(planet)
-    
-                        local angle = calculate.angle(planet.x, planet.y, self.player.x, self.player.y)
-                        local dAngle = math.abs(calculate.angleBetween(self.player.angle, angle))
-                        
-                        if touchDown then
-                            if dAngle >= 20 or math.sqrt(self.player.thrust.x^2 + self.player.thrust.y^2) > COLLISION_VELOCITY then
-                                self.player:destroy()
-                            else
-                                self:playerDocked(planet)
-                            end
-                        end
-                    end
-                end
-            end,
-
-            playerDocked = function (self, planet)
-                self.player.docked = true
-                self.player.undocked = false
-                self.player.docking = false
-                self.player.dockedPlanet = planet
-            end,
 
             planetDestroyed = function (self, planet)
                 if self.player.dockedPlanet == planet then
@@ -87,9 +55,9 @@ return {
 
             draw = function (self)
                 love.graphics.setColor(1, 0, 0)
-                love.graphics.rectangle('fill', love.graphics.getWidth() - 20, love.graphics.getHeight() - 120, 15, 100)
+                love.graphics.rectangle('fill', SCREEN_WIDTH - 20, SCREEN_HEIGHT - 120, 15, 100)
                 love.graphics.setColor(0, 1, 1)
-                love.graphics.rectangle('fill', love.graphics.getWidth() - 20, love.graphics.getHeight() - 120, 15, (self.player.forwardThruster.accel / self.player.maxThrusterAccel) * 100)
+                love.graphics.rectangle('fill', SCREEN_WIDTH - 20, SCREEN_HEIGHT - 120, 15, (self.player.forwardThruster.accel / self.player.maxThrusterAccel) * 100)
             end,
 
             update = function (self)

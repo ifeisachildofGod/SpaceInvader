@@ -16,7 +16,7 @@ ui = {
             size = size, 
             color = color,
             align = align or 'left',
-            wrapWidth = wrapWidth or love.graphics.getWidth(),
+            wrapWidth = wrapWidth or SCREEN_WIDTH,
 
             ---comment
             ---@param x_dir integer
@@ -47,7 +47,7 @@ ui = {
     userInterface = function ()
         local clickedOnceVariables = {}
         return {
-            pausedText = ui.text(love.graphics.getWidth() / 2, 0, 'h5', {r = 0.9, g = 0.9, b = 0.9}),
+            pausedText = ui.text(SCREEN_WIDTH / 2, 0, 'h5', {r = 0.9, g = 0.9, b = 0.9}),
             
             draw = function (self)
                 if STATESMACHINE.pause then

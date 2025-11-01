@@ -1,7 +1,8 @@
-local wrappers = require 'collisionBodies.characters.player.wrappers'
-local calculate = require 'calculate'
-local playerModes = require 'collisionBodies.characters.player.modes'
-local accecories = require 'accecories'
+local list          =   require 'list'
+local objects       =   require 'objects'
+local wrappers      =   require 'collisionBodies.characters.player.wrappers'
+local calculate     =   require 'calculate'
+local playerModes   =   require 'collisionBodies.characters.player.modes'
 
 local CAMERAFOCUSACCEL = 1
 
@@ -44,11 +45,13 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
     local characterShootFunc = function (...)
         local func = inputFunc(...)
         return function (self)
-            return func(), calculate.angle(love.mouse.getX(), love.mouse.getY(), self.x, self.y)
+            return func(), calculate.angle(love.mouse.getX(), love.mouse.getY(), self.x, self.y) + calculate.angle(self.planet.x, self.planet.y, self.x, self.y)
         end
     end
 
-    local playerSpacecraft = playerModes.playerVehicle(love.graphics.getWidth() / 2, love.graphics.getHeight() / 2, 20, nil, 'mouse', inputFunc('up', 'w'), inputFunc('down', 's'), inputFunc(2, 'z'), inputFunc(1, 'space'))
+    local control = {left = inputFunc('left', 'a'), right = inputFunc('right', 'd')} -- "mouse"
+
+    local playerSpacecraft = playerModes.playerVehicle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 20, nil, control, inputFunc('up', 'w'), inputFunc('down', 's'), inputFunc(2, 'z'), inputFunc(1, 'space'))
     local playerCharacter = playerModes.player(playerSpacecraft.x, playerSpacecraft.y, 7, {up = characterMoveFunc('w'), down = characterMoveFunc('s')}, nil, nil, inputFunc('x'), characterShootFunc('space', 1))
 
     local CameraRefPrev = {x=playerCharacter.x, y=playerCharacter.y}
@@ -56,20 +59,9 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
 
     playerCharacter.addBullet = function (self, angle)
         if not self.gettingDestroyed then
-            local bullet = accecories.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle - 90, 3, self.BULLET_VEL)
+            local bullet = objects.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle - 90, 3, self.BULLET_VEL)
             
             bullet.update = function (b)
-                if self.planet then
-                    local d = calculate.distance(b.x, b.y, self.planet.x, self.planet.y)
-                    
-                    local Fx = -self.gravity * math.cos(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90)) / d^2
-                    local Fy = self.gravity * math.sin(math.rad(calculate.angle(self.planet.x, self.planet.y, self.x, self.y) + 90)) / d^2
-                    
-                    b.thrust.x = b.thrust.x + Fx
-                    b.thrust.y = b.thrust.y + Fy
-                        
-                end
-                
                 b.x = WorldDirection.x + b.x + b.thrust.x
                 b.y = WorldDirection.y + b.y + b.thrust.y
                 
@@ -115,10 +107,9 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
         end,
 
         draw = function (self)
-            self.character.player:draw()
             self.spacecraft.player:draw()
-
             if self.modes.character then
+                self.character.player:draw()
                 self.character:draw()
             elseif self.modes.spacecraft then
                 self.spacecraft:draw()
@@ -134,7 +125,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
             if calculate.distance(self.character.player.x, self.character.player.y, astroid.x, astroid.y) < (self.character.player.radius + astroid.radius) - 4 then
                 if not self.character.player.gettingDestroyed then
                     self.character.player:destroy()
-                    if ListIndex(self.astroids, astroid) ~= -1 then
+                    if list.index(self.astroids, astroid) ~= -1 then
                         astroid:destroy()
                     end
                 end
@@ -142,7 +133,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
             if calculate.distance(self.spacecraft.player.x, self.spacecraft.player.y, astroid.x, astroid.y) < (self.spacecraft.player.radius + astroid.radius) - 4 then
                 if not self.spacecraft.player.gettingDestroyed then
                     self.spacecraft.player:destroy()
-                    if ListIndex(self.astroids, astroid) ~= -1 then
+                    if list.index(self.astroids, astroid) ~= -1 then
                         astroid:destroy()
                     end
                 end
@@ -155,6 +146,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
                 self.prevCharactersBulletAmt = #self.character.player.bullets
             end
             
+
             if self.modes.spacecraft then
                 self.character.player.planet = nil
                 self.player = self.spacecraft.player
@@ -182,12 +174,11 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
                 self.character.player.thrust.x, self.character.player.thrust.y = 0, 0
             end
 
-            if self.character.player.destroyed then
-                STATESMACHINE:setState('restart')
-            end
+            -- if self.character.player.destroyed then
+            --     STATESMACHINE:setState('restart')
+            -- end
 
             CameraRefPrev.x, CameraRefPrev.y = self.character.player.x, self.character.player.y
-            
             if not self.character.player.gettingDestroyed then
                 local dx = CameraRefCurr.x - CameraRefPrev.x
                 local dy = CameraRefCurr.y - CameraRefPrev.y

@@ -1,5 +1,9 @@
-love = require 'love'
-local ui = require 'ui'
+love       =   require 'love'
+local ui   =   require 'ui'
+
+
+SCREEN_WIDTH = 1000
+SCREEN_HEIGHT = 650
 
 DEBUGGING = true
 WorldDirection = {x=0, y=0}
@@ -24,14 +28,6 @@ Fonts = {
 
 
 
-function ListIndex(list, value)
-    for i, v in ipairs(list) do
-        if value == v then
-            return i
-        end
-    end
-    return -1
-end
 
 function StateMachine(statesTbl)
     local self = {
@@ -59,7 +55,7 @@ end
 ---@return table
 function LoggerFunc(loggerFilePath, scrollThresh)
     local loggerOutput = ui.text(0, 0, 'p', {1, 1, 1})
-    local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\SpaceInvader\\debug\\logger'
+    local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\Space-Explorer\\debug\\logger'
     local scollThreshold = scrollThresh or 30
 
     local logger = {}
@@ -76,8 +72,8 @@ function LoggerFunc(loggerFilePath, scrollThresh)
                 local args = {...}
                 local printedText = ''
                 
-                for _, msg in pairs(args) do
-                    printedText = printedText..tostring(msg)..((#args > 1) and logger.sep or '')
+                for msgIndex, msg in pairs(args) do
+                    printedText = printedText..tostring(msg)..((#args > 1) and ((msgIndex ~= #args and logger.sep) or '') or '')
                 end
                 printedText = printedText..logger.ending
                 

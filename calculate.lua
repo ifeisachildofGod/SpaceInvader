@@ -62,29 +62,6 @@ calculate = {
         return diff
     end,
     
-    lerp = function (from, to, by)
-        return from + (to - from) * by
-    end,
-    
-    lineIntersection = function (x, y, radius, lx1, ly1, lx2, ly2)
-        local left = math.min(lx1, lx2)
-        local top = math.min(ly1, ly2)
-        local width = math.abs(lx2 - lx1)
-        local height = math.abs(ly2 - ly1)
-
-        local xComparison = (left < x and x < left + width) or (left < x + radius and x + width < left + width)
-        local yComparison = (top < y and y < top + height) or (top < y + radius and y + height < top + height)
-        
-        if xComparison and yComparison then
-            return true
-        end
-        return false
-    end,
-
-    angleLerp = function (from, to, by)
-        return (from + calculate.angleBetween(from, to) * by) % 360
-    end,
-
     ---@param x1 number
     ---@param y1 number
     ---@param x2 number
@@ -97,6 +74,37 @@ calculate = {
         local angle2 = calculate.angle(x2, y2, pointX, pointY)
         
         return calculate.angleBetween(angle1, angle2) 
+    end,
+
+    angleLerp = function (from, to, by)
+        return (from + calculate.angleBetween(from, to) * by) % 360
+    end,
+    
+    lerp = function (from, to, by)
+        return from + (to - from) * by
+    end,
+    
+    lineIntersection = function (x, y, radius, lx1, ly1, lx2, ly2)
+        x = x - radius
+        y = y - radius
+        
+        radius = radius * 2
+
+        local left = math.min(lx1, lx2)
+        local top = math.min(ly1, ly2)
+        local width = math.abs(lx2 - lx1)
+        local height = math.abs(ly2 - ly1)
+        
+        local lXComparison = (left < x and x < left + width) or (left < x + radius and x + radius < left + width)
+        local lYComparison = (top < y and y < top + height) or (top < y + radius and y + radius < top + height)
+        
+        local bodyXComparison = (x < left  and left < x + radius) or (x < left + width and left + width < x + radius)
+        local bodyYComparison = (y < top and top < y + radius) or (y < top + height and top + height < y + radius)
+
+        if (lXComparison or bodyXComparison) and (lYComparison or bodyYComparison) then
+            return true
+        end
+        return false
     end,
 
     gravity = function (mass, radius)

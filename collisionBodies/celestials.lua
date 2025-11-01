@@ -1,4 +1,5 @@
-local calculate = require 'calculate'
+local list        =   require 'list'
+local calculate   =   require 'calculate'
 
 local celestials = {}
 
@@ -12,7 +13,7 @@ celestials = {
 
     planet = function (x, y, color, radius, astroBodies, massConstant)
         local astroBodiesRef = astroBodies
-        local MASS_CONSTANT = massConstant or 5
+        local MASS_CONSTANT = massConstant or 50
         
         return {
             x = x,
@@ -31,9 +32,17 @@ celestials = {
 
             applyPhysics = function (self)
                 for _, body in ipairs(self.astroBodies) do
-                    if body ~= self and not body.tooFarAway then
-                        local thrust1, thrust2 = calculate.twoBodyThrust(self, body)
+                    local dockedCondition
+                    
+                    if body.docked == nil then
+                        dockedCondition = true
+                    else
+                        dockedCondition = not body.docked
+                    end
 
+                    if body ~= self and calculate.distance(self.x, self.y, body.x, body.y) <= self.radius^3 and dockedCondition then
+                        local thrust1, thrust2 = calculate.twoBodyThrust(self, body)
+                        
                         self.thrust.x, self.thrust.y = thrust1.x, thrust1.y
                         body.thrust.x, body.thrust.y = thrust2.x, thrust2.y
 
@@ -50,6 +59,9 @@ celestials = {
                 if not self.tooFarAway then
                     self:applyPhysics()
                     self.mass = self.radius * MASS_CONSTANT
+                else
+                    self.thrust.x = 0
+                    self.thrust.y = 0
                 end
                 
                 self.x = self.x + WorldDirection.x
@@ -102,8 +114,8 @@ celestials = {
             destroy = function (self)
                 self.destroyed = true
 
-                local astroidsIndex = ListIndex(self.world.astroids, self)
-                local charactersIndex = ListIndex(self.world.collisionBodies, self)
+                local astroidsIndex = list.index(self.world.astroids, self)
+                local charactersIndex = list.index(self.world.collisionBodies, self)
 
                 if astroidsIndex < 0 or charactersIndex < 0 then
                     error('This astroid is somehow not in the list you messed up. Character index is '..charactersIndex..'. celestials.astroid index is '..astroidsIndex)

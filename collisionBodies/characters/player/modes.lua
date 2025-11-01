@@ -1,8 +1,8 @@
-local objects = require 'objects'
-local calculate = require 'calculate'
-local accecories = require 'accecories'
+local list        =   require 'list'
+local objects     =   require 'objects'
+local calculate   =   require 'calculate'
 
-local BULLET_VEL = 10
+local BULLET_VEL = 20
 local MAX_BULLETS_AMT = 15
 
 return {
@@ -31,10 +31,11 @@ return {
         local KEYBOARD_TURN_SPEED = calculate.interpolation(0.6, 2, turnSpeedAccuracy)
         local ACCEL_RANGE = calculate.interpolation(1, 6, accelAccuracy)
         local BRAKE_FRICTION = 0.2
+        local MASS_CONSTANT = 1e-11
+
         local EXPLODE_DUR = 2
         local FORWARD_THRUSTER_MAX_EMISSION = 50000
         local REVERSE_THRUSTER_MAX_EMISSION = 40000
-        local MASS_CONSTANT = 1e-11
         
         local movedUp = false
         local movedDown = false
@@ -62,23 +63,24 @@ return {
                 error('Invalid control parameter')
             end
         elseif control ~= 'mouse' then
-            error('Invalid control parameter')
+            error('Ife, this is an invalid control parameter')
         end
         
         return {
             x = x,
             y = y,
             angle = 0,
-            radius = radius,
-            mass = radius * MASS_CONSTANT,
-            color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
             
+            radius = radius,
+            mass = MASS_CONSTANT,
+            color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
             moveUpFunc = moveUpFunc,
             moveDownFunc = moveDownFunc,
             brakesFunc = brakesFunc,
             shootFunc = shootFunc,
             moveRightFunc = moveRightFunc,
             moveLeftFunc = moveLeftFunc,
+
             mouseAngle = 0,
             yDirection = 0,
             dockedPlanet = nil,
@@ -87,10 +89,12 @@ return {
             docking = false,
             destroyed = false,
             undocking = false,
+            setDockingAngle = false,
 
             gettingDestroyed = false,
             explodeTime = 0,
             undockingAngle = 0,
+            dockingAngle = 0,
             continueUndocking = true,
             accelAccelerator = 0.05,
             
@@ -151,9 +155,6 @@ return {
             -- Update
             update = function (self)
                 if not (self.gettingDestroyed or self.destroyed) then
-                    self.thrust.x = calculate.clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -self.thrust.maxSpeed, self.thrust.maxSpeed)
-                    self.thrust.y = calculate.clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -self.thrust.maxSpeed, self.thrust.maxSpeed)
-                    
                     if not self.undocked then
                         self:updateDockingProcedure()
                     end
@@ -220,11 +221,11 @@ return {
                             self.angle = calculate.angleLerp(self.angle, self.mouseAngle, MOUSE_TURN_SPEED)
                         else
                             if self.moveLeftFunc() then
-                                self:turnPlayer(1)
+                                self:turnPlayer(1.4)
                             end
 
                             if self.moveRightFunc() then
-                                self:turnPlayer(-1)
+                                self:turnPlayer(-1.4)
                             end
                         end
                     end
@@ -269,7 +270,7 @@ return {
 
             updateBullets = function (self)
                 for index, bullet in ipairs(self.bullets) do
-                    if bullet.dist > calculate.distance(love.graphics.getWidth(), love.graphics.getHeight()) then
+                    if bullet.dist > calculate.distance(SCREEN_WIDTH, SCREEN_HEIGHT) then
                         self:removeBullet(index)
                     else
                         bullet:update()
@@ -282,7 +283,9 @@ return {
                 
                 if self.docking then
                     local angle = (playerPlanetAngle + 90) % 360
-                    self.angle = calculate.angleLerp(self.angle, angle, 0.1)
+                    
+                    self.angle = calculate.angleLerp(self.angle, angle, MOUSE_TURN_SPEED)
+                    
                     local dAngle = math.abs(math.floor(self.angle) - math.floor(angle))
 
                     if dAngle <= 5 then
@@ -291,20 +294,28 @@ return {
                 end
 
                 if self.docked then
-                    local planetPlayerAngle = playerPlanetAngle + 180
+                    if self.setDockingAngle then
+                        self.dockingAngle = (playerPlanetAngle + 90) % 360
+                        self.setDockingAngle = false
+                    end
                     
-                    local planetsEdgeX = self.dockedPlanet.x + math.cos(math.rad(planetPlayerAngle)) * self.dockedPlanet.radius
-                    local planetsEdgeY = self.dockedPlanet.y - math.sin(math.rad(planetPlayerAngle)) * self.dockedPlanet.radius
-                    local playersEdgeX = -math.cos(math.rad(playerPlanetAngle)) * self.radius
-                    local playersEdgeY = math.sin(math.rad(playerPlanetAngle)) * self.radius
-                    
-                    self.x = planetsEdgeX + playersEdgeX
-                    self.y = planetsEdgeY + playersEdgeY
-
                     self.angle = (playerPlanetAngle + 90) % 360
                     
+                    local dx, dy = calculate.direction(self.angle)
+                    
+                    self.x = self.dockedPlanet.x + dx * (self.dockedPlanet.radius + self.radius)
+                    self.y = self.dockedPlanet.y + dy * (self.dockedPlanet.radius + self.radius)
+
                     self.thrust.x = 0
                     self.thrust.y = 0
+
+                    self.forwardThruster.x = 0
+                    self.forwardThruster.y = 0
+
+                    self.reverseThruster.x = 0
+                    self.reverseThruster.y = 0
+                else
+                    self.setDockingAngle = true
                 end
 
                 if self.undocking then
@@ -317,10 +328,12 @@ return {
                     self.x = self.x + self.thrust.x * DT
                     self.y = self.y + self.thrust.y * DT
                 end
-
-                if calculate.distance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > 4 then
+                
+                local g = math.min(calculate.GRAVITATIONAL_CONSTANT * self.dockedPlanet.mass / self.dockedPlanet.radius^2, 200)
+                if calculate.distance(self.x, self.y, self.dockedPlanet.x, self.dockedPlanet.y) - (self.dockedPlanet.radius + self.radius) > g and not self.docked then
                     self:undock()
                 end
+
             end,
 
             -- Docking
@@ -332,8 +345,8 @@ return {
 
             startUndock = function (self)
                 self.undocking = true
+                self.docking = false
                 self.docked = false
-
             end,
             
             undock = function (self)
@@ -342,13 +355,19 @@ return {
                 self.docked = false
                 self.dockedPlanet = nil
             end,
+            
+            dock = function (self, planet)
+                self.docked = true
+                self.undocked = false
+                self.docking = false
+                self.dockedPlanet = planet
+            end,
 
             -- Bullets
-            
             addBullet = function (self)
                 if not self.gettingDestroyed then
                     if #self.bullets <= MAX_BULLETS_AMT then
-                        table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(self.angle + 90)), self.y - math.sin(math.rad(self.angle + 90)), self.angle, 3, BULLET_VEL))
+                        table.insert(self.bullets, objects.bullet(self.x + math.cos(math.rad(self.angle + 90)) + self.forwardThruster.x, self.y - math.sin(math.rad(self.angle + 90)) + self.forwardThruster.y, self.angle, 3, BULLET_VEL))
                     end
                 end
             end,
@@ -366,7 +385,13 @@ return {
             
             movePlayer = function (self)
                 self.angle = self.angle % 360
+
+                local xMax = math.sqrt(math.abs(self.thrust.maxSpeed^2 - self.thrust.y^2))
+                local yMax = math.sqrt(math.abs(self.thrust.maxSpeed^2 - self.thrust.x^2))
                 
+                self.thrust.x = calculate.clamp(self.thrust.x + self.forwardThruster.x - self.reverseThruster.x, -xMax, xMax)
+                self.thrust.y = calculate.clamp(self.thrust.y + self.forwardThruster.y - self.reverseThruster.y, -yMax, yMax)
+
                 if not self.gettingDestroyed then
                     self.x = self.x + self.thrust.x * DT
                     self.y = self.y + self.thrust.y * DT
@@ -465,17 +490,17 @@ return {
 
             -- Misc
             removeEmissionCollisionPlanet = function (self, planet)
-                local particleIndex = ListIndex(self.explosionParticles.collisionBodies, planet)
+                local particleIndex = list.index(self.explosionParticles.collisionBodies, planet)
                 if particleIndex ~= -1 then
                     table.remove(self.explosionParticles.collisionBodies, particleIndex)
                 end
                 
-                particleIndex = ListIndex(self.forwardThruster.particles.collisionBodies, planet)
+                particleIndex = list.index(self.forwardThruster.particles.collisionBodies, planet)
                 if particleIndex ~= -1 then
                     table.remove(self.forwardThruster.particles.collisionBodies, particleIndex)
                 end
 
-                particleIndex = ListIndex(self.reverseThruster.particles.collisionBodies, planet)
+                particleIndex = list.index(self.reverseThruster.particles.collisionBodies, planet)
                 if particleIndex ~= -1 then
                     table.remove(self.reverseThruster.particles.collisionBodies, particleIndex)
                 end
@@ -571,7 +596,7 @@ return {
         local player = {}
 
         player = {
-            BULLET_VEL = 10,
+            BULLET_VEL = 40,
 
             x = x,
             y = y,
@@ -581,7 +606,7 @@ return {
             
             bullets = {},
 
-            horizontal = {displacement=0, velocity=0, acceleration=2, avgVelocity=400, decceleration=0.5},
+            horizontal = {displacement=0, velocity=0, acceleration=2.5, avgVelocity=400, decceleration=0.5},
             vertical = {displacement=0, velocity=0, acceleration=0, targetAcceleration=2, terminalVelocity=20},
             
             moveUpFunc = moveUpFunc,
@@ -676,7 +701,7 @@ return {
 
             updateBullets = function (self)
                 for index, bullet in ipairs(self.bullets) do
-                    if bullet.dist > love.graphics.getWidth() * 2 then
+                    if bullet.dist > SCREEN_WIDTH * 2 then
                         self:removeBullet(index)
                     else
                         if self.planet ~= nil then
@@ -697,13 +722,13 @@ return {
             
             addBullet = function (self, angle)
                 if not self.gettingDestroyed then
-                    table.insert(self.bullets, accecories.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle, 3, BULLET_VEL))
+                    table.insert(self.bullets, objects.bullet(self.x + math.cos(math.rad(angle)), self.y - math.sin(math.rad(angle)), angle, 3, BULLET_VEL))
                 end
             end,
 
             setPlanet = function (self, newPlanet)
                 self.planet = newPlanet
-                -- if ListIndex(self.planet.astroBodies, self) == -1 then
+                -- if list.index(self.planet.astroBodies, self) == -1 then
                 --     table.insert(self.planet.astroBodies, self)
                 -- end
                 self.gravity = calculate.gravity(self.planet.mass, self.planet.radius)
@@ -770,15 +795,13 @@ return {
 
                         if moveUp then
                             self:movePlayerHorizontally(math.sin(math.rad(upAngle)))
-                        else
-                            self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
                         end
                         
                         if moveDown then
                             self:movePlayerHorizontally(-math.sin(math.rad(downAngle)))
-                        else
-                            self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
                         end
+                        
+                        self.horizontal.velocity = calculate.lerp(self.horizontal.velocity, 0, self.horizontal.decceleration)
                     elseif self.moveRightFunc ~= nil and self.moveLeftFunc ~= nil then
                         if self.moveRightFunc() then
                             self:movePlayerHorizontally(1)

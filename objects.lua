@@ -1,8 +1,11 @@
-local calculate = require 'calculate'
+local calculate   =   require 'calculate'
 
 local objects = {}
 
 objects = {
+    
+    ---@param images table[]
+    ---@return table
     particleSystem = function (images)
         local CurrTime = 0
         local PrevTime = 0
@@ -26,6 +29,7 @@ objects = {
             userDrawAfterCallback = nil,
 
             draw = function (self)
+                love.graphics.setColor(1, 1, 1)
                 for _, particle in ipairs(self.particles) do
                     self:drawParticle(particle)
                 end
@@ -261,9 +265,39 @@ objects = {
             end
         }
     end,
+    
+    ---@param x number
+    ---@param y number
+    ---@param angle number
+    ---@param radius number
+    ---@param vel number
+    ---@return table
+    bullet = function (x, y, angle, radius, vel)
+        return {
+            x = x,
+            y = y,
+            angle = angle + 90,
+            radius = radius,
+            thrust = {x=math.cos(math.rad(angle+90)) * vel, y=-math.sin(math.rad(angle+90)) * vel},
+            vel = vel,
 
-    --- Sprite
-    --- @param frames table This could a list of file paths or a list of love-images
+            dist = 0,
+
+            update = function (self)
+                self.x = WorldDirection.x + self.x + self.thrust.x
+                self.y = WorldDirection.y + self.y + self.thrust.y
+                
+                self.dist = self.dist + calculate.distance(self.thrust.x, self.thrust.y)
+            end,
+            
+            draw = function (self)
+                love.graphics.setColor(1, 1, 1)
+                love.graphics.circle('fill', self.x, self.y, self.radius)
+            end
+        }
+    end,
+
+    --- @param frames table This could a list of file paths or a list of images
     --- @param pos table This is the info concerning the x, y and rotational data of the sprite {x = 0, y = 0, r? = 0}
     --- @param fps number How fast the frames go
     --- @param updateFunction? fun(spriteInfo: table) How thw sprite interacts with itself

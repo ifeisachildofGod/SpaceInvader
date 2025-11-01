@@ -1,9 +1,10 @@
-local ui         = require 'ui'
-local Player     = require 'collisionBodies.characters.player.player' 
-local enemies    = require 'collisionBodies.characters.enemies'
-local objects    = require 'objects'
-local calculate  = require 'calculate'
-local celestials = require 'collisionBodies.celestials'
+local ui           =   require 'ui'
+local list         =   require 'list'
+local Player       =   require 'collisionBodies.characters.player.player' 
+local enemies      =   require 'collisionBodies.characters.enemies'
+local objects      =   require 'objects'
+local calculate    =   require 'calculate'
+local celestials   =   require 'collisionBodies.celestials'
 
 
 ---@return table
@@ -17,44 +18,31 @@ local function WorldWrapper()
     local astroids = {}
     local collisionBodies = {}
     local planets = {
-        celestials.planet(love.graphics.getWidth() / 2, (love.graphics.getHeight() / 2) + 1000, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
+        celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) + 4000 + 50, {r=100/255, g=120/255, b=21/255}, 4000, collisionBodies),
+        celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 16000 - 50, {r=100/255, g=120/255, b=21/255}, 400, collisionBodies),
+        celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 26000 - 50, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
         -- celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 200, collisionBodies)
     }
-    
-    for _, planet in ipairs(planets) do
-        table.insert(collisionBodies, planet)
-    end
 
     local player = Player(kamikazees, stationaryGunners, kamikazeeGunners, astroids, collisionBodies, planets)
-
-    for _, kamikazee in ipairs(kamikazees) do
-        table.insert(collisionBodies, kamikazee)
-    end
-    for _, fighter in ipairs(fighters) do
-        table.insert(collisionBodies, fighter)
-    end
-    for _, stationaryGunner in ipairs(stationaryGunners) do
-        table.insert(collisionBodies, stationaryGunner)
-    end
-    for _, kamikazeeGunner in ipairs(kamikazeeGunners) do
-        table.insert(collisionBodies, kamikazeeGunner)
-    end
 
     local environment = objects.spritesManager()
     environment.addSprite({love.graphics.newImage('images/background.png')}, {x=-200, y=-100}, 0)
     
     local world = {
         zoom = nil,
-        minZoom = 0.2,
-        maxZoom = 2,
+        minZoom = 0.001,
+        maxZoom = 5,
         zoomRate = 0.01,
         screenScaling = 1,
         zoomDMouseX = 0,
         zoomDMouseY = 0,
         zoomMousePrevPos = {x=0, y=0},
         pauseScreenPosOffset = {x=0, y=0},
-        mouseZoomDistanceX = 0,
-        mouseZoomDistanceY = 0,
+        origMouseX = love.mouse.getX(),
+        origMouseY = love.mouse.getY(),
+        mouseZoomDistanceX = love.mouse.getX() - SCREEN_WIDTH / 2,
+        mouseZoomDistanceY = love.mouse.getY() - SCREEN_HEIGHT / 2,
 
         player = player,
         kamikazees = kamikazees,
@@ -66,22 +54,32 @@ local function WorldWrapper()
         userInterface = ui.userInterface(),
         astroids = astroids,
         destroyedPlanets = {},
+        totalWorldOffset = {x = 0, y = 0},
         
-        nearestOptimizationDistance = 2 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
-        farthestOptimizationDistance = 3 * math.sqrt(love.graphics.getWidth()^2 + love.graphics.getHeight()^2),
+        nearestOptimizationDistance = 5 * math.sqrt(SCREEN_WIDTH^2 + SCREEN_HEIGHT^2),
+        farthestOptimizationDistance = 6 * math.sqrt(SCREEN_WIDTH^2 + SCREEN_HEIGHT^2),
         charactersActivated = false,
 
         keyPressed = function (self, key)
-            if key == 'f' then
-                table.insert(self.fighters, enemies.fighter(love.mouse.getX(), love.mouse.getY(), 10, self.player, self, {1, 1, 0}))
-            elseif key == 'c' then
-                table.insert(self.kamikazeeGunners, enemies.kamikazeeGunner(love.mouse.getX(), love.mouse.getY(), 10, self.player, self, {1, 0, 0}))
-            elseif key == 'r' then
-                table.insert(self.kamikazees, enemies.kamikazee(love.mouse.getX(), love.mouse.getY(), 10, self.player, self, {0, 1, 0}))
-            elseif key == 't' then
-                table.insert(self.stationaryGunners, enemies.stationaryGunner(love.mouse.getX(), love.mouse.getY(), 10, self.player, self, {0, 0, 1}))
-            elseif key == 'q' then
-                self.charactersActivated = not self.charactersActivated
+            if DEBUGGING then
+                local x = love.mouse.getX()
+                local y = love.mouse.getY()
+
+                if key == 'f' then
+                    table.insert(self.fighters, enemies.fighter(x, y, 10, self.player, self, {1, 1, 0}))
+                elseif key == 'c' then
+                    table.insert(self.kamikazeeGunners, enemies.kamikazeeGunner(x, y, 10, self.player, self, {1, 0, 0}))
+                elseif key == 'r' then
+                    table.insert(self.kamikazees, enemies.kamikazee(x, y, 10, self.player, self, {0, 1, 0}))
+                elseif key == 't' then
+                    table.insert(self.stationaryGunners, enemies.stationaryGunner(x, y, 10, self.player, self, {0, 0, 1}))
+                elseif key == 'q' then
+                    self.charactersActivated = not self.charactersActivated
+                elseif key == 'escape' then
+                    if self.player.gettingDestroyed then
+                        STATESMACHINE:setState('restart')
+                    end
+                end
             end
         end,
 
@@ -89,10 +87,31 @@ local function WorldWrapper()
             self.player:mousePressed(mouseCode)
         end,
         
+        updateCharacterInPlanets = function (character, planet)
+            if not character.docked and not character.gettingDestroyed then
+                local touchDown = calculate.distance(planet.x, planet.y, character.x, character.y) < planet.radius + character.radius
+                character:addEmissionCollisionPlanet(planet)
+                
+                if touchDown then
+                    local angle = calculate.angle(planet.x, planet.y, character.x, character.y)
+                    local dAngle = math.abs(calculate.angleBetween(character.angle, angle))
+
+                    local g = calculate.GRAVITATIONAL_CONSTANT * planet.mass / planet.radius^2
+                    local escapeVel = math.sqrt(2 * planet.radius * g)
+                    
+                    if dAngle <= 20 and math.sqrt(character.thrust.x^2 + character.thrust.y^2) < escapeVel then
+                        character:dock(planet)
+                    else
+                        character:destroy()
+                    end
+                end
+            end
+        end,
+
         updateAstroid = function (self)
             if #self.astroids < celestials.ASTROID_MIN_ALLOWED then
-                local astroid = celestials.astroid(math.random(love.graphics.getWidth()),
-                                        math.random(love.graphics.getHeight()),
+                local astroid = celestials.astroid(math.random(SCREEN_WIDTH),
+                                        math.random(SCREEN_HEIGHT),
                                         {r = math.random(0, 255) / 255, g = math.random(0, 255) / 255, b = math.random(0, 255) / 255},
                                         math.random(celestials.ASTROID_MIN_ALLOWED, celestials.ASTROID_MAX_RAD),
                                         math.random(celestials.ASTROID_MIN_SIDES, celestials.ASTROID_MAX_SIDES),
@@ -117,10 +136,10 @@ local function WorldWrapper()
 
                 for _, character in ipairs(self.collisionBodies) do
                     if astroid ~= character and calculate.distance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 and not character.gettingDestroyed then
-                        if ListIndex(self.astroids, astroid) ~= -1 and (character.mass - astroid.mass >= 0 or character.planet ~= nil) then
+                        if list.index(self.astroids, astroid) ~= -1 and (character.mass - astroid.mass >= 0 or character.planet ~= nil) then
                             astroid:destroy()
                         end
-                        if ListIndex(self.collisionBodies, character) ~= -1 then
+                        if list.index(self.collisionBodies, character) ~= -1 then
                             if character.destroy ~= nil then
                                 character:destroy()
                             else
@@ -133,7 +152,7 @@ local function WorldWrapper()
 
                     if character.bullets ~= nil then
                         for bulletIndex, bullet in ipairs(character.bullets) do
-                            if calculate.distance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius and ListIndex(self.astroids, astroid) ~= -1 then
+                            if calculate.distance(bullet.x, bullet.y, astroid.x, astroid.y) < astroid.radius and list.index(self.astroids, astroid) ~= -1 then
                                 character:removeBullet(bulletIndex)
                                 astroid:destroy()
                             end
@@ -145,18 +164,25 @@ local function WorldWrapper()
 
         updatePlanets = function (self)
             for _, planet in ipairs(self.planets) do
-                planet.farAway = calculate.distance(planet.x, planet.y, self.player.player.x, self.player.player.y) > self.nearestOptimizationDistance
-                planet.tooFarAway = calculate.distance(planet.x, planet.y, self.player.player.x, self.player.player.y) > self.farthestOptimizationDistance
+                planet.astroBodies = self.collisionBodies
+
+                planet.farAway = calculate.distance(planet.x, planet.y, self.player.player.x, self.player.player.y) - (self.player.player.radius + planet.radius) > self.nearestOptimizationDistance
+                planet.tooFarAway = calculate.distance(planet.x, planet.y, self.player.player.x, self.player.player.y) - (self.player.player.radius + planet.radius) > self.farthestOptimizationDistance
                 planet:update()
 
-                for _, body in ipairs(self.collisionBodies) do
+                for _, body in ipairs(list.add(self.astroids, self.planets)) do
                     if body ~= planet and body.planet ~= nil and calculate.distance(body.x, body.y, planet.x, planet.y) < (body.radius + planet.radius) then
                         local destroyedPlanet = (body.mass - planet.mass) >= 20 and planet or body
                         table.insert(self.destroyedPlanets, destroyedPlanet)
                     end
                 end
                 
+                for _, kamikazee in ipairs(self.kamikazees) do
+                    self.updateCharacterInPlanets(kamikazee, planet)
+                end
+
                 for _, stationaryGunner in ipairs(self.stationaryGunners) do
+                    self.updateCharacterInPlanets(stationaryGunner, planet)
                     for bulletIndex, bullet in ipairs(stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                             stationaryGunner:removeBullet(bulletIndex)
@@ -165,6 +191,7 @@ local function WorldWrapper()
                 end
                 
                 for _, kamikazeeGunner in ipairs(self.kamikazeeGunners) do
+                    self.updateCharacterInPlanets(kamikazeeGunner, planet)
                     for bulletIndex, bullet in ipairs(kamikazeeGunner.stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                             kamikazeeGunner.stationaryGunner:removeBullet(bulletIndex)
@@ -173,6 +200,7 @@ local function WorldWrapper()
                 end
                 
                 for _, fighter in ipairs(self.fighters) do
+                    self.updateCharacterInPlanets(fighter, planet)
                     for bulletIndex, bullet in ipairs(fighter.stationaryGunner.bullets) do
                         if calculate.distance(planet.x, planet.y, bullet.x, bullet.y) <= planet.radius then
                             fighter.stationaryGunner:removeBullet(bulletIndex)
@@ -180,8 +208,10 @@ local function WorldWrapper()
                     end
                 end
                 
-                self.player:updatePlayerInPlanets(planet)
+                self.updateCharacterInPlanets(self.player.spacecraft.player, planet)
+                -- self.player:updatePlayerInPlanets(planet)
             end
+            -- logger.log(#self.stationaryGunners)
             
             for _, destroyedPlanet in ipairs(self.destroyedPlanets) do
                 local astroid = celestials.astroid(
@@ -205,8 +235,8 @@ local function WorldWrapper()
                 
                 self.player:planetDestroyed(destroyedPlanet)
 
-                table.remove(self.planets, ListIndex(self.planets, destroyedPlanet))
-                table.remove(self.collisionBodies, ListIndex(self.collisionBodies, destroyedPlanet))
+                table.remove(self.planets, list.index(self.planets, destroyedPlanet))
+                table.remove(self.collisionBodies, list.index(self.collisionBodies, destroyedPlanet))
             end
             
             self.destroyedPlanets = {}
@@ -219,8 +249,8 @@ local function WorldWrapper()
                 -- local top = character.y - character.radius
                 -- local bottom = character.y + character.radius
 
-                -- local xComparison = (left < 0 and 0 < right) or (character.radius < right and left < love.graphics.getWidth())
-                -- local yComparison = (top < 0 and 0 < bottom) or (character.radius < bottom and top < love.graphics.getHeight())
+                -- local xComparison = (left < 0 and 0 < right) or (character.radius < right and left < SCREEN_WIDTH)
+                -- local yComparison = (top < 0 and 0 < bottom) or (character.radius < bottom and top < SCREEN_HEIGHT)
                 
                 -- if xComparison and yComparison then
                 --     character:draw()
@@ -239,7 +269,7 @@ local function WorldWrapper()
         end,
 
         draw = function (self)
-            if STATESMACHINE.pause then
+            if STATESMACHINE.pause or (DEBUGGING and self.player.gettingDestroyed) then
                 love.graphics.translate(self.pauseScreenPosOffset.x, self.pauseScreenPosOffset.y)
                 love.graphics.translate(-(self.mouseZoomDistanceX - self.pauseScreenPosOffset.x) * (self.screenScaling - 1),  -(self.mouseZoomDistanceY - self.pauseScreenPosOffset.y) * (self.screenScaling - 1))
                 love.graphics.scale(self.screenScaling, self.screenScaling)
@@ -256,12 +286,23 @@ local function WorldWrapper()
             self.player:draw()
             
             self.userInterface:draw()
+
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1, 1, 1)
+            if STATESMACHINE.pause or (DEBUGGING and self.player.gettingDestroyed) then
+                love.graphics.rectangle('fill', calculate.clamp(SCREEN_WIDTH / 2 + self.totalWorldOffset.x, 0, SCREEN_WIDTH - 20), calculate.clamp(SCREEN_HEIGHT / 2 + self.totalWorldOffset.y, 0, SCREEN_HEIGHT - 20), 20, 20)
+            end
         end,
 
         update = function (self)
+            self.collisionBodies = list.add(self.stationaryGunners, self.kamikazeeGunners, self.fighters, self.kamikazees, self.astroids, self.planets, {self.player.spacecraft.player}, self.player.spacecraft.player.bullets)
+            
             self.userInterface:update()
 
             if not STATESMACHINE.pause then
+                self.totalWorldOffset.x = self.totalWorldOffset.x + WorldDirection.x
+                self.totalWorldOffset.y = self.totalWorldOffset.y + WorldDirection.y
+
                 environment.update()
                 
                 self.player:update()
@@ -313,14 +354,15 @@ local function WorldWrapper()
                     end
                 end
                 self:updateAstroid()
-                
-                self.mouseZoomDistanceX = love.mouse.getX() - love.graphics.getWidth() / 2
-                self.mouseZoomDistanceY = love.mouse.getY() - love.graphics.getHeight() / 2
-            else
-                
+
+                -- self.mouseZoomDistanceX = love.mouse.getX() - SCREEN_WIDTH / 2
+                -- self.mouseZoomDistanceY = love.mouse.getY() - SCREEN_HEIGHT / 2
+            end
+
+            if STATESMACHINE.pause or (DEBUGGING and self.player.gettingDestroyed) then
                 if love.mouse.isDown(1) then
-                    self.zoomDMouseX = love.mouse.getX() - self.zoomMousePrevPos.x
-                    self.zoomDMouseY = love.mouse.getY() - self.zoomMousePrevPos.y
+                    self.zoomDMouseX = (love.mouse.getX() - self.zoomMousePrevPos.x) / self.screenScaling
+                    self.zoomDMouseY = (love.mouse.getY() - self.zoomMousePrevPos.y) / self.screenScaling
 
                     self.pauseScreenPosOffset.x = self.pauseScreenPosOffset.x + self.zoomDMouseX
                     self.pauseScreenPosOffset.y = self.pauseScreenPosOffset.y + self.zoomDMouseY
@@ -333,16 +375,16 @@ local function WorldWrapper()
     }
     
     love.wheelmoved = function (_, dy)
-        if STATESMACHINE.pause then
+        if STATESMACHINE.pause or (DEBUGGING and world.player.gettingDestroyed) then
             if world.zoom == nil then
                 world.zoom = 0.5
             end
             world.zoom = calculate.clamp(world.zoom + dy * world.zoomRate, 0, 1)
             world.screenScaling = calculate.interpolation(world.minZoom, world.maxZoom, world.zoom)
             
-            if math.abs((world.zoom * 2) + 1) ~= 1 then
-                world.mouseZoomDistanceX = calculate.lerp(world.mouseZoomDistanceX, love.mouse.getX(), 0.2)
-                world.mouseZoomDistanceY = calculate.lerp(world.mouseZoomDistanceY, love.mouse.getY(), 0.2)
+            if math.abs((world.zoom * 2) - 1) ~= 1 then
+                world.mouseZoomDistanceX = calculate.lerp(world.mouseZoomDistanceX, love.mouse.getX(), 0.5)
+                world.mouseZoomDistanceY = calculate.lerp(world.mouseZoomDistanceY, love.mouse.getY(), 0.5)
             end
         else
             if world.player.modes.spacecraft then

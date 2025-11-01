@@ -12,6 +12,8 @@
 - Change the input system and make it more dynamic, make the parameters for the input system function based instead of table
 - Add two new enemies
 - Add a map in the pause menu to see where things are
+- Make the player able to be chased by enemies on the planet
+- Optimize the game and try and remove bottlenecks
 
 ## TODO
 - Fix the playerVehicle movement
@@ -38,15 +40,17 @@
 - Make the player jump better
 - The enemies have a serious and confusing bug when the kamikazee gunner enemy is added fix it
 - Fix the multiple bugs in the enemies scripts
+- Add functionality to make the enemy on the planet come out of his ship, chase you and try to kill you
 
 ## RECENT
 
 ### Objectives
-- Make the player able to be chased by enemies on the planet
-- Optimize the game and try and remove bottlenecks
 
 ### TODO
-- Add functionality to make the enemy on the planet come out of his ship, chase you and try to kill you
+- Fix the bouncing the enemies do when the land on the planet after looking for the player and cant find him
+- Find and fix the bug that causes the fighter enemy to freeze once the enemy in "far away" from the player
+- Make the enemy able to kill the player while on the planet
+- Fix the collision of the enemies on the planet
 
 # NOT DONE
 
@@ -69,5 +73,5 @@
 - Add a way for the player to know his bearings and where he is on the minimap
 - Fix the bugs in the minimap when in the pause and zooming, partially by updating the UI
 - Fix the angle and distance from where the enemy is to shoot the player while on the planet
-- Find and fix the bug that causes the fighter enemy to freeze once the enemy in "far away" from the player
-- Make the enemy able to kill the player while on the planet
+- Fix the system that makes the enemies return home after a kill
+- Fix the rotational garbage
