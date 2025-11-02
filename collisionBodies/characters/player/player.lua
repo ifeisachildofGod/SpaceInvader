@@ -52,7 +52,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
     local control = {left = inputFunc('left', 'a'), right = inputFunc('right', 'd')} -- "mouse"
 
     local playerSpacecraft = playerModes.playerVehicle(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 20, nil, control, inputFunc('up', 'w'), inputFunc('down', 's'), inputFunc(2, 'z'), inputFunc(1, 'space'))
-    local playerCharacter = playerModes.player(playerSpacecraft.x, playerSpacecraft.y, 7, {up = characterMoveFunc('w'), down = characterMoveFunc('s')}, nil, nil, inputFunc('x'), characterShootFunc('space', 1))
+    local playerCharacter = playerModes.player(playerSpacecraft.x, playerSpacecraft.y, 7, {up = characterMoveFunc('w'), down = characterMoveFunc('s')}, nil, nil, inputFunc(3), characterShootFunc('space', 1))
 
     local CameraRefPrev = {x=playerCharacter.x, y=playerCharacter.y}
     local CameraRefCurr = {x=playerCharacter.x, y=playerCharacter.y}
@@ -124,7 +124,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
         astroidUpdate = function (self, astroid)
             if calculate.distance(self.character.player.x, self.character.player.y, astroid.x, astroid.y) < (self.character.player.radius + astroid.radius) - 4 then
                 if not self.character.player.gettingDestroyed then
-                    self.character.player:destroy()
+                    self.character.player:damage(astroid.radius / 2)
                     if list.index(self.astroids, astroid) ~= -1 then
                         astroid:destroy()
                     end
@@ -132,7 +132,7 @@ local Player = function (kamikazees, stationaryGunners, kamikazeeGunners, astroi
             end
             if calculate.distance(self.spacecraft.player.x, self.spacecraft.player.y, astroid.x, astroid.y) < (self.spacecraft.player.radius + astroid.radius) - 4 then
                 if not self.spacecraft.player.gettingDestroyed then
-                    self.spacecraft.player:destroy()
+                    self.spacecraft.player:damage(astroid.radius / 10)
                     if list.index(self.astroids, astroid) ~= -1 then
                         astroid:destroy()
                     end

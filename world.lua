@@ -9,7 +9,7 @@ local celestials   =   require 'collisionBodies.celestials'
 
 ---@return table
 local function WorldWrapper()
-    -- local world = {}
+    local world = {}
 
     local stationaryGunners = {}
     local fighters = {}
@@ -17,19 +17,23 @@ local function WorldWrapper()
     local kamikazeeGunners = {}
     local astroids = {}
     local collisionBodies = {}
+
     local planets = {
         celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) + 4000 + 50, {r=100/255, g=120/255, b=21/255}, 4000, collisionBodies),
-        -- celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 16000 - 50, {r=100/255, g=120/255, b=21/255}, 400, collisionBodies),
-        -- celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 26000 - 50, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
         -- celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 200, collisionBodies)
     }
 
     local player = Player(kamikazees, stationaryGunners, kamikazeeGunners, astroids, collisionBodies, planets)
+    
 
     local environment = objects.spritesManager()
     environment.addSprite({love.graphics.newImage('images/background.png')}, {x=-200, y=-100}, 0)
     
-    local world = {
+    for _ = 1, 10, 1 do
+        environment.addSprite({love.graphics.newImage('images/background.png')}, {x=-math.random(-50000, 50000), y=-math.random(-50000, 50000)}, 0)
+    end
+
+    world = {
         zoom = nil,
         minZoom = 0.001,
         maxZoom = 5,
@@ -66,13 +70,13 @@ local function WorldWrapper()
                 local y = love.mouse.getY()
 
                 if key == 'f' then
-                    table.insert(self.fighters, enemies.fighter(x, y, 10, self.player, self, {1, 1, 0}))
+                    table.insert(self.fighters, enemies.fighter(x, y, 10, self.player, planets[1], self, {1, 1, 0}))
                 elseif key == 'c' then
-                    table.insert(self.kamikazeeGunners, enemies.kamikazeeGunner(x, y, 10, self.player, self, {1, 0, 0}))
+                    table.insert(self.kamikazeeGunners, enemies.kamikazeeGunner(x, y, 10, self.player, planets[1], self, {1, 0, 0}))
                 elseif key == 'r' then
-                    table.insert(self.kamikazees, enemies.kamikazee(x, y, 10, self.player, self, {0, 1, 0}))
+                    table.insert(self.kamikazees, enemies.kamikazee(x, y, 10, self.player, planets[1], self, {0, 1, 0}))
                 elseif key == 't' then
-                    table.insert(self.stationaryGunners, enemies.stationaryGunner(x, y, 10, self.player, self, {0, 0, 1}))
+                    table.insert(self.stationaryGunners, enemies.stationaryGunner(x, y, 10, self.player, planets[1], self, {0, 0, 1}))
                 elseif key == 'q' then
                     self.charactersActivated = not self.charactersActivated
                 elseif key == 'escape' then
@@ -135,14 +139,14 @@ local function WorldWrapper()
                 end
 
                 for _, character in ipairs(self.collisionBodies) do
-                    if astroid ~= character and calculate.distance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 and not character.gettingDestroyed then
+                    if astroid ~= character and character.mass ~= nil and calculate.distance(character.x, character.y, astroid.x, astroid.y) < (character.radius + astroid.radius) - 4 and not character.gettingDestroyed then
                         if list.index(self.astroids, astroid) ~= -1 and (character.mass - astroid.mass >= 0 or character.planet ~= nil) then
                             astroid:destroy()
                         end
                         if list.index(self.collisionBodies, character) ~= -1 then
-                            if character.destroy ~= nil then
-                                character:destroy()
-                            else
+                            if type(character.damage) == "function" then
+                                character:damage(astroid.radius / 10)
+                            elseif character.damage == nil then
                                 if astroid.astroidAmt < 2 then
                                     character.radius = character.radius + math.sqrt(astroid.mass)
                                 end
@@ -374,6 +378,58 @@ local function WorldWrapper()
         end
     }
     
+    local KA = 30
+    local KGA = 3
+    local SA = 3
+    local FA = 3
+    
+    for _ = 1, 3, 1 do
+        local P = celestials.planet(
+            math.random(-50000, 50000),
+            math.random(-50000, 50000),
+            {
+                r=math.random(0, 255)/255,
+                g=math.random(0, 255)/255,
+                b=math.random(0, 255)/255
+            },
+            math.random(500, 5000),
+            collisionBodies--,
+            -- {x = math.random(0, 200), y = math.random(0, 200)}
+        )
+
+        for kI = 1, KA, 1 do
+            local ang = kI * 360 / KA
+            local dx, dy = calculate.direction(ang)
+
+           table.insert(kamikazees, enemies.kamikazee(P.x + (dx * P.radius * 1.5), P.y + (dy * P.radius * 1.5), 10, player, P, world, {0, 1, 0}))
+        end
+
+        
+        for kgI = 1, KGA, 1 do
+            local ang = (360 / KA / 2) + (kgI * 360 / KGA)
+            local dx, dy = calculate.direction(ang)
+
+           table.insert(kamikazeeGunners, enemies.kamikazeeGunner(P.x + (dx * P.radius * 1.5), P.y + (dy * P.radius * 1.5), 10, player, P, world, {1, 0, 0}))
+        end
+
+        for sI = 1, SA, 1 do
+            local ang = (360 / KGA / 2) + (360 / KA / 2) + (sI * 360 / SA)
+            local dx, dy = calculate.direction(ang)
+
+           table.insert(stationaryGunners, enemies.stationaryGunner(P.x + (dx * P.radius * 1.5), P.y + (dy * P.radius * 1.5), 10, player, P, world, {0, 0, 1}))
+        end
+
+        for fI = 1, FA, 1 do
+            local ang = (360 / SA / 2) + (360 / KGA / 2) + (360 / KA / 2) + (fI * 360 / FA)
+            local dx, dy = calculate.direction(ang)
+
+           table.insert(fighters, enemies.fighter(P.x + (dx * P.radius * 1.5), P.y + (dy * P.radius * 1.5), 10, player, P, world, {0, 1, 1}))
+        end
+        
+
+        table.insert(planets, P)
+    end
+
     love.wheelmoved = function (_, dy)
         if STATESMACHINE.pause or (DEBUGGING and world.player.gettingDestroyed) then
             if world.zoom == nil then

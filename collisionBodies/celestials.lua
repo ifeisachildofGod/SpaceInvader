@@ -11,10 +11,18 @@ celestials = {
     ASTROID_MAX_VEL = 100,
     ASTROID_DEFAULT_AMT = 3,
 
-    planet = function (x, y, color, radius, astroBodies, massConstant)
+    ---@param x number
+    ---@param y number
+    ---@param color table
+    ---@param radius number
+    ---@param astroBodies table
+    ---@param uVel? table
+    ---@param massConstant? number
+    planet = function (x, y, color, radius, astroBodies, uVel, massConstant)
         local astroBodiesRef = astroBodies
         local MASS_CONSTANT = massConstant or 50
-        
+        uVel = uVel or {x = 0, y = 0}
+
         return {
             x = x,
             y = y,
@@ -22,7 +30,7 @@ celestials = {
             radius = radius,
             mass = radius * MASS_CONSTANT,
             astroBodies = astroBodiesRef,
-            thrust = {x = 0, y = 0},
+            thrust = {x = uVel.x, y = uVel.y},
             color = {r = color.r or color[1], g = color.g or color[2], b = color.b or color[3]},
             
             draw = function (self)

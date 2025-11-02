@@ -7,7 +7,7 @@ calculate = {
         return math.max(math.min(x, max), min)
     end,
 
-    ---@overload fun(x: number, y: number): number
+    ---@overload fun(dx: number, dy: number): number
     ---@param x1 number
     ---@param y1 number
     ---@param x2 number
@@ -27,7 +27,7 @@ calculate = {
         return math.sqrt(dX^2 + dY^2)
     end,
 
-    ---@overload fun(x: number, y: number): number
+    ---@overload fun(dx: number, dy: number): number
     ---@param x1 number
     ---@param y1 number
     ---@param x2 number

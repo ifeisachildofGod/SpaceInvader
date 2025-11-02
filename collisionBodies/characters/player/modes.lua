@@ -70,6 +70,7 @@ return {
             x = x,
             y = y,
             angle = 0,
+            health = 100,
             
             radius = radius,
             mass = MASS_CONSTANT,
@@ -541,8 +542,18 @@ return {
 
             destroy = function (self)
                 self.gettingDestroyed = true
+                self.health = 0
             end,
             
+            damage = function (self, d)
+                self.health = self.health - d
+
+                if self.health <= 0 then
+                    self:destroy()
+                    self.health = 0
+                end
+            end,
+
             acceleratePlayer = function (self, dy)
                 self.forwardThruster.accel = calculate.clamp(self.forwardThruster.accel + (dy * ACCEL_RANGE * self.accelAccelerator), 0, self.maxThrusterAccel)
                 self.reverseThruster.accel = calculate.clamp(self.reverseThruster.accel + (dy * ACCEL_RANGE * self.accelAccelerator), 0, self.maxThrusterAccel)
@@ -603,6 +614,7 @@ return {
             radius = radius,
             mass = radius * MASS_CONSTANT,
             angle = 0,
+            health = 100,
             
             bullets = {},
 
@@ -762,6 +774,16 @@ return {
             
             destroy = function (self)
                 self.gettingDestroyed = true
+                self.health = 0
+            end,
+            
+            damage = function (self, d)
+                self.health = self.health - d
+                
+                if self.health <= 0 then
+                    self:destroy()
+                    self.health = 0
+                end
             end,
 
             updateExplosionProcedures = function (self)

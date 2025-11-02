@@ -10,11 +10,12 @@ enemies =  {
     ---@param y number
     ---@param radius number
     ---@param player table
+    ---@param homePlanet table
     ---@param world table
     ---@param color? table
     ---@param turnSpeedAccuracy? number
     ---@return table
-    stationaryGunner = function (x, y, radius, player, world, color, turnSpeedAccuracy)
+    stationaryGunner = function (x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy)
         turnSpeedAccuracy = turnSpeedAccuracy or 1
 
         local currShotTimer = 0
@@ -22,7 +23,7 @@ enemies =  {
         
         local enemy = characters.playerVehicle(x, y, radius, color)
         
-        enemy.planet = world.planets[1]
+        enemy.planet = homePlanet or world.planets[1]
         enemy.foundPlayer = false
         enemy.player = player.character.player
         enemy.TURN_SPEED = calculate.interpolation(0.03, 0.9, turnSpeedAccuracy)
@@ -43,26 +44,26 @@ enemies =  {
             for bulletIndex, bullet in ipairs(self.bullets) do
                 for _, kamikazee in ipairs(world.kamikazees) do
                     if calculate.distance(bullet.x, bullet.y, kamikazee.x, kamikazee.y) < kamikazee.radius then
-                        kamikazee:destroy()
+                        kamikazee:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
                 
                 for _, kamikazeeGunner in ipairs(world.kamikazeeGunners) do
                     if calculate.distance(bullet.x, bullet.y, kamikazeeGunner.x, kamikazeeGunner.y) < kamikazeeGunner.radius and kamikazeeGunner.stationaryGunner ~= self then
-                        kamikazeeGunner:destroy()
+                        kamikazeeGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
 
                 for _, fighter in ipairs(world.fighters) do
                     if calculate.distance(bullet.x, bullet.y, fighter.x, fighter.y) < fighter.radius and fighter.stationaryGunner ~= self then
-                        fighter:destroy()
+                        fighter:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                     
                     if calculate.distance(bullet.x, bullet.y, fighter.character.x, fighter.character.y) < fighter.character.radius and fighter.character.stationaryGunner ~= self and fighter.docked then
-                        fighter.character:destroy()
+                        fighter.character:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
@@ -70,6 +71,15 @@ enemies =  {
             
             if self.destroyed then
                 table.remove(world.stationaryGunners, index)
+            end
+        end
+
+        enemy.damage = function (self, d)
+            self.health = self.health - d
+
+            if self.health <= 0 then
+                self:destroy()
+                self.health = 0
             end
         end
 
@@ -134,12 +144,12 @@ enemies =  {
                 if kilCondition then
                     self.player:destroy()
                     if player.modes.spacecraft then
-                        player.spacecraft.player:destroy() 
+                        player.spacecraft.player:damage(bullet.damage)
                     end
                     self:removeBullet(index)
                 else
                     if calculate.distance(bullet.x, bullet.y, player.spacecraft.player.x, player.spacecraft.player.y) < player.spacecraft.player.radius then
-                        player.spacecraft.player:destroy()
+                        player.spacecraft.player:damage(bullet.damage)
                     end
                 end
             end
@@ -147,7 +157,7 @@ enemies =  {
             if not self.tooFarAway then
                 for index, bullet in ipairs(player.spacecraft.player.bullets) do
                     if calculate.distance(bullet.x, bullet.y, self.x, self.y) < self.radius then
-                        self:destroy()
+                        self:damage(bullet.damage)
                         player.spacecraft.player:removeBullet(index)
                     end
                 end
@@ -205,10 +215,11 @@ enemies =  {
     ---@param y number
     ---@param radius number
     ---@param player table
+    ---@param homePlanet? table
     ---@param world table
     ---@param color? table
     ---@return table
-    kamikazee = function (x, y, radius, player, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+    kamikazee = function (x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
         local defaultAccuracy = 1
 
         angleContextWindowAccuracy = angleContextWindowAccuracy or defaultAccuracy
@@ -219,7 +230,7 @@ enemies =  {
 
         local enemy = characters.playerVehicle(x, y, radius, color)
 
-        enemy.planet = world.planets[1]
+        enemy.planet = homePlanet or world.planets[1]
 
         enemy.hasSetAngle = false
 
@@ -237,7 +248,7 @@ enemies =  {
         enemy.dockingDistance = 600
         enemy.playerBreakOffDistance = math.sqrt(SCREEN_WIDTH^2 + SCREEN_HEIGHT^2)
         enemy.characterBaseAngle = 20
-        enemy.dockingVel = 10
+        enemy.dockingVel = 30
         enemy.searchingForHomePlanet = false
         enemy.hasSetSearchState = false
         enemy.homeCheckpoints = {}
@@ -245,20 +256,123 @@ enemies =  {
         enemy.forwardThruster.particles:setScale(5)
         enemy.forwardThruster.particles:setDurationRange(0.1, 0.5)
         
-        enemy.getReturnSafetyScore = function(s_x, s_y, targetPlanet)
+        enemy.getPositionSafetyScore = function (prevPosX, prevPosY, checkPosX, checkPosY, target)
             local score = 0
-
+            local CRASH_DISTANCE = 50  -- Adjust based on planet radius
+            local DANGER_DISTANCE = 150  -- Distance to start penalizing
+            local GRAVITY_WELL_DISTANCE = 300  -- Distance where gravity becomes significant
+            
+            -- Calculate distance to target planet
+            local distToTarget = calculate.distance(checkPosX, checkPosY, target.x, target.y) - target.radius
+            local prevDistToTarget = calculate.distance(prevPosX, prevPosY, target.x, target.y) - target.radius
+            
+            -- ============================================
+            -- 1. REWARD: Getting closer to target planet
+            -- ============================================
+            if distToTarget < prevDistToTarget then
+                -- Moving closer is good
+                local improvement = prevDistToTarget - distToTarget
+                score = score + improvement * 2
+            else
+                -- Moving away is bad
+                local worsening = distToTarget - prevDistToTarget
+                score = score - worsening * 1.5
+            end
+            
+            -- ============================================
+            -- 2. REWARD: Being close to target (but not too close)
+            -- ============================================
+            local targetProximityScore = 1000 / (distToTarget + 1)  -- Inverse relationship
+            score = score + targetProximityScore
+            
+            -- ============================================
+            -- 3. PENALTY: Dangerous proximity to obstacles
+            -- ============================================
             for _, planet in ipairs(world.planets) do
-                if targetPlanet ~= planet then
-                    score = score + (calculate.distance(s_x, s_y, planet.x, planet.y) - (planet.radius + (planet.mass / (planet.radius^2))))
+                local distToPlanet = calculate.distance(checkPosX, checkPosY, planet.x, planet.y) - planet.radius
+                
+                -- Severe penalty for crash course
+                if distToPlanet < CRASH_DISTANCE then
+                    score = score - 10000  -- Massive penalty
+                -- Heavy penalty for danger zone
+                elseif distToPlanet < DANGER_DISTANCE then
+                    local dangerScore = (DANGER_DISTANCE - distToPlanet) / DANGER_DISTANCE
+                    score = score - dangerScore * 500
+                -- Moderate penalty for gravity well
+                elseif distToPlanet < GRAVITY_WELL_DISTANCE then
+                    local gravityScore = (GRAVITY_WELL_DISTANCE - distToPlanet) / GRAVITY_WELL_DISTANCE
+                    score = score - gravityScore * 100
                 end
             end
-
-            score = score - (calculate.distance(s_x, s_y, targetPlanet.x, targetPlanet.y) - (targetPlanet.radius + (targetPlanet.mass / (targetPlanet.radius^2)))) ^ 2
-
+            
+            -- ============================================
+            -- 4. PENALTY: Check trajectory toward obstacles
+            -- ============================================
+            local velocity = {
+                x = checkPosX - prevPosX,
+                y = checkPosY - prevPosY
+            }
+            local speed = math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+            
+            if speed > 0.1 then  -- Only check if moving
+                for _, planet in ipairs(world.planets) do
+                    -- Vector from current position to planet
+                    local toPlanet = {
+                        x = planet.x - checkPosX,
+                        y = planet.y - checkPosY
+                    }
+                    
+                    -- Dot product to check if heading toward planet
+                    local dot = velocity.x * toPlanet.x + velocity.y * toPlanet.y
+                    
+                    if dot > 0 then  -- Heading toward planet
+                        local distToPlanet = calculate.distance(checkPosX, checkPosY, planet.x, planet.y) - planet.radius
+                        -- Normalize dot product
+                        local toPlanetDist = calculate.distance(toPlanet.x, toPlanet.y)
+                        local alignment = dot / (speed * toPlanetDist)
+                        
+                        -- More penalty if heading directly at planet and close
+                        if alignment > 0.7 and distToPlanet < GRAVITY_WELL_DISTANCE then
+                            score = score - alignment * 200
+                        end
+                    end
+                end
+            end
+            
+            -- ============================================
+            -- 5. BONUS: Efficient movement (not too fast or slow)
+            -- ============================================
+            if speed > 0 then
+                -- Optimal speed range (adjust based on your game)
+                local OPTIMAL_SPEED = 5
+                local speedEfficiency = 1 - math.abs(speed - OPTIMAL_SPEED) / OPTIMAL_SPEED
+                speedEfficiency = math.max(0, speedEfficiency)
+                score = score + speedEfficiency * 50
+            end
+            
+            -- ============================================
+            -- 6. BONUS: Clear path to target
+            -- ============================================
+            local hasCleanPath = true
+            for _, planet in ipairs(world.planets) do
+                -- Check if any planet is between ship and target
+                local distToPlanet = calculate.distance(checkPosX, checkPosY, planet.x, planet.y) - planet.radius
+                local distPlanetToTarget = calculate.distance(planet.x, planet.y, target.x, target.y) - planet.radius
+                
+                -- If planet is roughly between ship and target
+                if distToPlanet + distPlanetToTarget < distToTarget * 1.2 then
+                    hasCleanPath = false
+                    break
+                end
+            end
+            
+            if hasCleanPath then
+                score = score + 100
+            end
+            
             return score
         end
-
+        
         enemy.getSafestRoute = function (self, targetPlanet, steps, stepDist, checkPointAmt)
             local angles = {}
             local score = -math.huge
@@ -274,7 +388,7 @@ enemies =  {
                     local dx, dy = calculate.direction(angle)
                     
                     local s_x, s_y = step_X + (dx * stepDist), step_Y + (dy * stepDist)
-                    local newScore = self.getReturnSafetyScore(s_x, s_y, targetPlanet)
+                    local newScore = self.getPositionSafetyScore(step_X, step_Y, s_x, s_y, targetPlanet)
                     
                     if newScore > score then
                         score = newScore
@@ -289,21 +403,6 @@ enemies =  {
 
             return angles
         end
-
-        enemy.getPointPos = function (pos1, pos2, pivot, angle)
-            local x1 = pos1.x
-            local y1 = pos1.y
-            local x2 = pos2.x
-            local y2 = pos2.y
-            
-            local theta = angle or ((90 - math.deg(math.atan2(y1 - y2, x2 - x1))) % 360)
-            
-            local Nx = pivot.x - (pivot.radius + 500) * math.cos(math.rad(theta))
-            local Ny = pivot.y - (pivot.radius + 500) * math.sin(math.rad(theta))
-            
-            return Nx, Ny, theta
-        end
-        
         
         enemy.draw = function (self)
             self:drawBullets()
@@ -417,7 +516,7 @@ enemies =  {
         enemy.updatePlayerDestruction = function (self)
             for index, bullet in ipairs(player.spacecraft.player.bullets) do
                 if calculate.distance(bullet.x, bullet.y, self.x, self.y) < self.radius then
-                    self:destroy()
+                    self:damage(bullet.damage)
                     player.spacecraft.player:removeBullet(index)
                 end
             end
@@ -434,6 +533,14 @@ enemies =  {
                 end 
             end
         end
+        
+        enemy.damage = function (self, d)
+            self.health = self.health - d
+            if self.health <= 0 then
+                self:destroy()
+                self.health = 0
+            end
+        end
 
         enemy.returnToPlanet = function (self, planet)
             logger.log(self.docking)
@@ -441,14 +548,14 @@ enemies =  {
                 if not self.docking then
                     if #self.homeCheckpoints == 0 then
                         -- Getting the checkpoint route
-                        self.homeCheckpoints = self:getSafestRoute(planet, 7, 200, 6)
+                        self.homeCheckpoints = self:getSafestRoute(planet, 7, 100, 60)
                     else
                         -- Moving to the checkpoint
                         ---@diagnostic disable-next-line: unbalanced-assignments
                         
                         local cp = self.homeCheckpoints[1]
                         
-                        if calculate.distance(self.x, self.y, cp.x, cp.y) <= self.radius + 100 then
+                        if calculate.distance(self.x, self.y, cp.x, cp.y) <= self.radius + 200 then
                             table.remove(self.homeCheckpoints, 1)
                         else
                             self.targetAngle = calculate.angle(self.x, self.y, cp.x, cp.y)
@@ -457,6 +564,7 @@ enemies =  {
                     
                     if calculate.distance(self.x, self.y, planet.x, planet.y) - (planet.radius + self.radius) <= self.dockingDistance then
                         self.docking = true
+                        self.homeCheckpoints = {}
                     else
                         self:releaseReverseThrusters()
                         self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
@@ -558,12 +666,13 @@ enemies =  {
     ---@param y number
     ---@param radius number
     ---@param player table
+    ---@param homePlanet? table
     ---@param color? table
     ---@param turnSpeedAccuracy? number
     ---@return table
-    kamikazeeGunner = function (x, y, radius, player, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
-        local enemy = enemies.kamikazee(x, y, radius, player, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
-        local stationaryGunner = enemies.stationaryGunner(x, y, radius, player, world, color, turnSpeedAccuracy)
+    kamikazeeGunner = function (x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+        local enemy = enemies.kamikazee(x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+        local stationaryGunner = enemies.stationaryGunner(x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy)
         
         local prevShotTimer = 0
         local currShotTimer = 0
@@ -590,26 +699,26 @@ enemies =  {
             for bulletIndex, bullet in ipairs(self.bullets) do
                 for _, kamikazee in ipairs(world.kamikazees) do
                     if calculate.distance(bullet.x, bullet.y, kamikazee.x, kamikazee.y) < kamikazee.radius then
-                        kamikazee:destroy()
+                        kamikazee:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
                 
                 for _, fighter in ipairs(world.fighters) do
                     if calculate.distance(bullet.x, bullet.y, fighter.x, fighter.y) < fighter.radius and fighter.stationaryGunner ~= self then
-                        fighter:destroy()
+                        fighter:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
 
                     if calculate.distance(bullet.x, bullet.y, fighter.character.x, fighter.character.y) < fighter.character.radius and fighter.character.stationaryGunner ~= self and fighter.docked then
-                        fighter.character:destroy()
+                        fighter.character:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
 
                 for _, stGunner in ipairs(world.stationaryGunners) do
                     if calculate.distance(bullet.x, bullet.y, stGunner.x, stGunner.y) < stGunner.radius then
-                        stGunner:destroy()
+                        stGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
@@ -648,21 +757,21 @@ enemies =  {
             for bulletIndex, bullet in ipairs(self.bullets) do
                 for _, stationaryGunners in ipairs(world.stationaryGunners) do
                     if calculate.distance(bullet.x, bullet.y, stationaryGunners.x, stationaryGunners.y) < stationaryGunners.radius then
-                        stationaryGunners:destroy()
+                        stationaryGunners:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
 
                 for _, kamikazee in ipairs(world.kamikazees) do
                     if calculate.distance(bullet.x, bullet.y, kamikazee.x, kamikazee.y) < kamikazee.radius then
-                        kamikazee:destroy()
+                        kamikazee:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
                 
                 for _, kamikazeeGunner in ipairs(world.kamikazeeGunners) do
                     if calculate.distance(bullet.x, bullet.y, kamikazeeGunner.x, kamikazeeGunner.y) < kamikazeeGunner.radius then
-                        kamikazeeGunner:destroy()
+                        kamikazeeGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
@@ -738,9 +847,9 @@ enemies =  {
     ---@param targetPointAccuracy? number
     ---@param maxSpeedAccuracy? number
     ---@return unknown
-    fighter = function (x, y, radius, player, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+    fighter = function (x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
         local nearestPlanet = {distance = 0, planet = nil}
-        local enemy = enemies.kamikazeeGunner(x, y, radius, player, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
+        local enemy = enemies.kamikazeeGunner(x, y, radius, player, homePlanet, world, color, turnSpeedAccuracy, angleContextWindowAccuracy, accelAccuracy, targetPointAccuracy, maxSpeedAccuracy)
         
         local shotsPersecond = 4
         local currShotTimer = 0
@@ -775,7 +884,6 @@ enemies =  {
         
         local characterShootFunction = function ()
             local angle = 90
-            local stepRate = 1.5
 
             return function ()
                 enemy.character.shotBullet = false
@@ -940,21 +1048,21 @@ enemies =  {
             for bulletIndex, bullet in ipairs(self.bullets) do
                 for _, stationaryGunners in ipairs(world.stationaryGunners) do
                     if calculate.distance(bullet.x, bullet.y, stationaryGunners.x, stationaryGunners.y) < stationaryGunners.radius then
-                        stationaryGunners:destroy()
+                        stationaryGunners:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
 
                 for _, kamikazee in ipairs(world.kamikazees) do
                     if calculate.distance(bullet.x, bullet.y, kamikazee.x, kamikazee.y) < kamikazee.radius then
-                        kamikazee:destroy()
+                        kamikazee:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
                 
                 for _, kamikazeeGunner in ipairs(world.kamikazeeGunners) do
                     if calculate.distance(bullet.x, bullet.y, kamikazeeGunner.x, kamikazeeGunner.y) < kamikazeeGunner.radius then
-                        kamikazeeGunner:destroy()
+                        kamikazeeGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
@@ -1047,21 +1155,21 @@ enemies =  {
             for bulletIndex, bullet in ipairs(self.bullets) do
                 for _, kamikazee in ipairs(world.kamikazees) do
                     if calculate.distance(bullet.x, bullet.y, kamikazee.x, kamikazee.y) < kamikazee.radius then
-                        kamikazee:destroy()
+                        kamikazee:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
                 
                 for _, kamikazeeGunner in ipairs(world.kamikazeeGunners) do
                     if calculate.distance(bullet.x, bullet.y, kamikazeeGunner.x, kamikazeeGunner.y) < kamikazeeGunner.radius and kamikazeeGunner.stationaryGunner ~= self then
-                        kamikazeeGunner:destroy()
+                        kamikazeeGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
 
                 for _, stationaryGunner in ipairs(world.stationaryGunners) do
                     if calculate.distance(bullet.x, bullet.y, stationaryGunner.x, stationaryGunner.y) < stationaryGunner.radius then
-                        stationaryGunner:destroy()
+                        stationaryGunner:damage(bullet.damage)
                         self:removeBullet(bulletIndex)
                     end
                 end
@@ -1071,12 +1179,12 @@ enemies =  {
         enemy.updatePlayerDestruction = function (self)
             for index, bullet in ipairs(player.spacecraft.player.bullets) do
                 if calculate.distance(bullet.x, bullet.y, self.x, self.y) < self.radius and not self.gettingDestroyed then
-                    self:destroy()
+                    self:damage(bullet.damage)
                     player.spacecraft.player:removeBullet(index)
                 end
                 
                 if calculate.distance(bullet.x, bullet.y, self.character.x, self.character.y) < self.character.radius + bullet.radius and not self.character.gettingDestroyed then
-                    self.character:destroy()
+                    self.character:damage(bullet.damage)
                     player.spacecraft.player:removeBullet(index)
                 end
             end

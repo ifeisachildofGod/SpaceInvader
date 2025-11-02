@@ -271,8 +271,11 @@ objects = {
     ---@param angle number
     ---@param radius number
     ---@param vel number
+    ---@param damage? number
     ---@return table
-    bullet = function (x, y, angle, radius, vel)
+    bullet = function (x, y, angle, radius, vel, damage)
+        damage = damage or 1.5
+
         return {
             x = x,
             y = y,
@@ -280,6 +283,7 @@ objects = {
             radius = radius,
             thrust = {x=math.cos(math.rad(angle+90)) * vel, y=-math.sin(math.rad(angle+90)) * vel},
             vel = vel,
+            damage = damage,
 
             dist = 0,
 
