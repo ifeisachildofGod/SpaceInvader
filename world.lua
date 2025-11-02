@@ -19,8 +19,8 @@ local function WorldWrapper()
     local collisionBodies = {}
     local planets = {
         celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) + 4000 + 50, {r=100/255, g=120/255, b=21/255}, 4000, collisionBodies),
-        celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 16000 - 50, {r=100/255, g=120/255, b=21/255}, 400, collisionBodies),
-        celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 26000 - 50, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
+        -- celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 16000 - 50, {r=100/255, g=120/255, b=21/255}, 400, collisionBodies),
+        -- celestials.planet(SCREEN_WIDTH / 2, (SCREEN_HEIGHT / 2) - 26000 - 50, {r=100/255, g=120/255, b=21/255}, 1000, collisionBodies),
         -- celestials.planet(820, 820, {r=0/255, g=255/255, b=201/255}, 200, collisionBodies)
     }
 

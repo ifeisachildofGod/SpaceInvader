@@ -50,22 +50,19 @@ function StateMachine(statesTbl)
 end
 
 
----@param loggerFilePath? string
+---@param loggerFilePath string
 ---@param scrollThresh? integer
 ---@return table
 function LoggerFunc(loggerFilePath, scrollThresh)
     local loggerOutput = ui.text(0, 0, 'p', {1, 1, 1})
-    local loggerPath = loggerFilePath or 'C:\\Users\\User\\Documents\\Code\\lua\\Space-Explorer\\debug\\logger'
     local scollThreshold = scrollThresh or 30
-
+    
     local logger = {}
-
+    
     logger = {
         text = '',
         sep = ' ',
         ending = '\n',
-        loggingFile = io.open(loggerPath, "a"),
-        loggerFilePath = loggerPath,
 
         log = function (...)
             if DEBUGGING then
@@ -128,13 +125,13 @@ function LoggerFunc(loggerFilePath, scrollThresh)
         end,
 
         closeFile = function (self)
-            if DEBUGGING then 
+            if DEBUGGING and self.loggingFile ~= nil then
                 self.loggingFile:close()
             end
         end,
 
         clearFile = function (self)
-            if DEBUGGING then 
+            if DEBUGGING and self.loggingFile ~= nil then
                 self:closeFile()
                 self.loggingFile = io.open(self.loggerFilePath, "w")
                 self.loggingFile:write('')
@@ -146,13 +143,13 @@ function LoggerFunc(loggerFilePath, scrollThresh)
         DEBUG = function (self)
         end
     }
+    
+    logger:setLogPath(loggerFilePath)
 
     return logger
 end
 
-logger = LoggerFunc()
-
-logger:setLogPath(logger.loggerFilePath)
+logger = LoggerFunc('C:\\Users\\User\\Documents\\Code\\lua\\Space-Explorer\\debug\\logger')
 logger:clearFile()
 
 logger.log('[Running] Love "'..debug.getinfo(1).source..'"')

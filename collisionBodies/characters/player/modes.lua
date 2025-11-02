@@ -10,11 +10,11 @@ return {
     ---@param y number
     ---@param radius number
     ---@param color? table
-    ---@param control string|table
-    ---@param moveUpFunc fun(): boolean
-    ---@param moveDownFunc fun(): boolean
-    ---@param brakesFunc fun(): boolean
-    ---@param shootFunc fun(): boolean
+    ---@param control? string|table
+    ---@param moveUpFunc? fun(): boolean
+    ---@param moveDownFunc? fun(): boolean
+    ---@param brakesFunc? fun(): boolean
+    ---@param shootFunc? fun(): boolean
     ---@param accelAccuracy? number
     ---@param turnSpeedAccuracy? number
     ---@param maxSpeedAccuracy? number
@@ -39,7 +39,7 @@ return {
         
         local movedUp = false
         local movedDown = false
-        local moveRightFunc, moveLeftFunc
+        local moveRightFunc, moveLeftFunc = nil, nil
         local mouseNormalization = 1
 
         local updatedExplosion = false
@@ -62,7 +62,7 @@ return {
             else
                 error('Invalid control parameter')
             end
-        elseif control ~= 'mouse' then
+        elseif control ~= 'mouse' and control ~= nil then
             error('Ife, this is an invalid control parameter')
         end
         
@@ -192,13 +192,13 @@ return {
                     movedDown = false
 
                     if not self.docking then
-                        if self.moveUpFunc() then
+                        if self.moveUpFunc ~= nil and self.moveUpFunc() then
                             self.yDirection = 1
                             movedUp = true
                         end
 
                         if not self.docked and not self.undocking then
-                            if self.moveDownFunc() then
+                            if self.moveDownFunc ~= nil and self.moveDownFunc() then
                                 self.yDirection = -1
                                 movedDown = true
                             end
@@ -206,7 +206,7 @@ return {
                             self:releaseReverseThrusters()
                         end
 
-                        if self.brakesFunc() then
+                        if self.brakesFunc ~= nil and self.brakesFunc() then
                             self:onBrakesPressed()
                         end
                     end
@@ -220,17 +220,17 @@ return {
                             
                             self.angle = calculate.angleLerp(self.angle, self.mouseAngle, MOUSE_TURN_SPEED)
                         else
-                            if self.moveLeftFunc() then
+                            if self.moveLeftFunc ~= nil and self.moveLeftFunc() then
                                 self:turnPlayer(1.4)
                             end
 
-                            if self.moveRightFunc() then
+                            if self.moveRightFunc ~= nil and self.moveRightFunc() then
                                 self:turnPlayer(-1.4)
                             end
                         end
                     end
 
-                    if self.shootFunc() then
+                    if self.shootFunc ~= nil and self.shootFunc() then
                         if not self.shotBullet then
                             self:addBullet()
                             self.shotBullet = true

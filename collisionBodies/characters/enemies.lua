@@ -20,8 +20,7 @@ enemies =  {
         local currShotTimer = 0
         local prevShotTimer = 0
         
-        local dummyFunc = function () return false end
-        local enemy = characters.playerVehicle(x, y, radius, color, 'mouse', dummyFunc, dummyFunc, dummyFunc, dummyFunc)
+        local enemy = characters.playerVehicle(x, y, radius, color)
         
         enemy.planet = world.planets[1]
         enemy.foundPlayer = false
@@ -218,8 +217,7 @@ enemies =  {
         targetPointAccuracy = targetPointAccuracy or defaultAccuracy
         maxSpeedAccuracy = maxSpeedAccuracy or defaultAccuracy
 
-        local dummyFunc = function () return false end
-        local enemy = characters.playerVehicle(x, y, radius, color, 'mouse', dummyFunc, dummyFunc, dummyFunc, dummyFunc)
+        local enemy = characters.playerVehicle(x, y, radius, color)
 
         enemy.planet = world.planets[1]
 
@@ -236,10 +234,10 @@ enemies =  {
         
         enemy.targetAngle = 0
         enemy.fovAngle = 180
-        enemy.dockingDistance = 200
+        enemy.dockingDistance = 600
         enemy.playerBreakOffDistance = math.sqrt(SCREEN_WIDTH^2 + SCREEN_HEIGHT^2)
         enemy.characterBaseAngle = 20
-        enemy.dockingVel = 6
+        enemy.dockingVel = 10
         enemy.searchingForHomePlanet = false
         enemy.hasSetSearchState = false
         enemy.homeCheckpoints = {}
@@ -247,6 +245,51 @@ enemies =  {
         enemy.forwardThruster.particles:setScale(5)
         enemy.forwardThruster.particles:setDurationRange(0.1, 0.5)
         
+        enemy.getReturnSafetyScore = function(s_x, s_y, targetPlanet)
+            local score = 0
+
+            for _, planet in ipairs(world.planets) do
+                if targetPlanet ~= planet then
+                    score = score + (calculate.distance(s_x, s_y, planet.x, planet.y) - (planet.radius + (planet.mass / (planet.radius^2))))
+                end
+            end
+
+            score = score - (calculate.distance(s_x, s_y, targetPlanet.x, targetPlanet.y) - (targetPlanet.radius + (targetPlanet.mass / (targetPlanet.radius^2)))) ^ 2
+
+            return score
+        end
+
+        enemy.getSafestRoute = function (self, targetPlanet, steps, stepDist, checkPointAmt)
+            local angles = {}
+            local score = -math.huge
+
+            local step_X, step_Y = self.x, self.y;
+            
+            local safestStepX, safestStepY = step_X, step_Y
+
+            for _ = 1, steps do
+                for turn = 0, checkPointAmt do
+                    local angle = turn * 360 / checkPointAmt
+
+                    local dx, dy = calculate.direction(angle)
+                    
+                    local s_x, s_y = step_X + (dx * stepDist), step_Y + (dy * stepDist)
+                    local newScore = self.getReturnSafetyScore(s_x, s_y, targetPlanet)
+                    
+                    if newScore > score then
+                        score = newScore
+                        safestStepX, safestStepY = s_x, s_y
+                    end
+                end
+                
+                step_X, step_Y = safestStepX, safestStepY
+
+                table.insert(angles, {x=step_X, y=step_Y})
+            end
+
+            return angles
+        end
+
         enemy.getPointPos = function (pos1, pos2, pivot, angle)
             local x1 = pos1.x
             local y1 = pos1.y
@@ -301,6 +344,21 @@ enemies =  {
                     self.thrust.x = self.thrust.x + ((math.random() * 2) - 1) * (self.forwardThruster.x^2)
                     self.thrust.y = self.thrust.y + ((math.random() * 2) - 1) * (self.forwardThruster.y^2)
                 end
+            end
+        end
+        
+        enemy.updateDock = function (self, planet)
+            self.targetAngle = calculate.angle(planet.x, planet.y, self.x, self.y) % 360
+            self.forwardThruster.x = 0
+            self.forwardThruster.y = 0
+            
+            local speed = calculate.distance(self.thrust.x, self.thrust.y)
+            
+            if speed > self.dockingVel then
+                self:onBrakesPressed()
+            elseif speed < self.dockingVel then
+                self.reverseThruster.x = self.reverseThruster.x + math.cos(math.rad(self.angle + 90)) * self.reverseThruster.accel
+                self.reverseThruster.y = self.reverseThruster.y - math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
             end
         end
 
@@ -378,113 +436,35 @@ enemies =  {
         end
 
         enemy.returnToPlanet = function (self, planet)
+            logger.log(self.docking)
             if not self.docked and not self.gettingDestroyed then
-                local lineIntercepted = false
-                
-                local homeDestX, homeDestY = planet.x + math.cos(math.rad(self.characterBaseAngle)) * (planet.radius + self.dockingDistance), planet.y - math.sin(math.rad(self.characterBaseAngle)) * (planet.radius + self.dockingDistance)
-                
-                local planetsIntersected = {}
-                
-                if #self.homeCheckpoints ~= 0 then
-                    local hx, hy, hRad = self.homeCheckpoints[1].x, self.homeCheckpoints[1].y, self.homeCheckpoints[1].radius
-                    self.targetAngle = (calculate.angle(hx, hy, self.x, self.y) - 180) % 360
-                    if calculate.distance(hx, hy, self.x, self.y) - self.radius < hRad then
-                        table.remove(self.homeCheckpoints, 1)
+                if not self.docking then
+                    if #self.homeCheckpoints == 0 then
+                        -- Getting the checkpoint route
+                        self.homeCheckpoints = self:getSafestRoute(planet, 7, 200, 6)
+                    else
+                        -- Moving to the checkpoint
+                        ---@diagnostic disable-next-line: unbalanced-assignments
+                        
+                        local cp = self.homeCheckpoints[1]
+                        
+                        if calculate.distance(self.x, self.y, cp.x, cp.y) <= self.radius + 100 then
+                            table.remove(self.homeCheckpoints, 1)
+                        else
+                            self.targetAngle = calculate.angle(self.x, self.y, cp.x, cp.y)
+                        end
                     end
-                else
-                    if not self.searchingForHomePlanet then
+                    
+                    if calculate.distance(self.x, self.y, planet.x, planet.y) - (planet.radius + self.radius) <= self.dockingDistance then
                         self.docking = true
-                    end
-                end
-                
-                if self.searchingForHomePlanet and #self.homeCheckpoints == 0 and not self.docking then
-                    self.searchingForHomePlanet = false
-
-                    for _, p in ipairs(list.add(world.planets, world.astroids)) do
-                        lineIntercepted = calculate.lineIntersection(p.x, p.y, p.radius, self.x, self.y, homeDestX, homeDestY)-- and calculate.distance(self.x, self.y, planet.x, planet.y) - (self.radius + planet.radius) < self.dockingDistance
-                        
-                        if lineIntercepted then
-                            table.insert(planetsIntersected, p)
-                        end
-                    end
-
-                    planetsIntersected = list.sort(planetsIntersected, function (p) return calculate.distance(p.x, p.y, self.x, self.y) - (self.radius + p.radius) end)
-                    
-                    local halfOfTheCheckPoints = {}
-                    
-                    for pIndex, p in ipairs(planetsIntersected) do
-                        local angle = 90 - math.deg(math.atan2(p.y - self.y, self.x - p.x))
-                        
-                        local xOffset = p.x + math.cos(math.rad(angle)) * (p.radius + 500)
-                        local yOffset = p.y - math.sin(math.rad(angle)) * (p.radius + 500)
-                        
-                        table.insert(halfOfTheCheckPoints, {x = xOffset, y = yOffset, index = pIndex, planet = p})
+                    else
+                        self:releaseReverseThrusters()
+                        self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                        self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel
                     end
                     
-                    table.insert(halfOfTheCheckPoints, 1, {x = self.x, y = self.y})
-                    table.insert(halfOfTheCheckPoints, {x= homeDestX, y = homeDestY, planet = self.planet})
-    
-                    for pIndex, pInfo in ipairs(halfOfTheCheckPoints) do
-                        if pInfo.index ~= nil then
-                            local p = planetsIntersected[pInfo.index]
-                            
-                            local condition = pIndex ~= #halfOfTheCheckPoints
-                            if not condition then
-                                condition = calculate.lineIntersection(p.x, p.y, p.radius, halfOfTheCheckPoints[pIndex - 1].x, halfOfTheCheckPoints[pIndex - 1].y, halfOfTheCheckPoints[pIndex].x, halfOfTheCheckPoints[pIndex].y)
-                            end
-    
-                            if condition then
-                                local pointX, pointY, theta = self.getPointPos(halfOfTheCheckPoints[pIndex - 1], halfOfTheCheckPoints[pIndex], p)
-                                local occurrenceRate = 0.1
-
-                                for angle = 1, math.floor(theta * occurrenceRate) do
-                                    pointX, pointY, _ = self.getPointPos(halfOfTheCheckPoints[pIndex - 1], halfOfTheCheckPoints[pIndex], p, angle / occurrenceRate)
-
-                                    table.insert(self.homeCheckpoints, #self.homeCheckpoints + 1, {x = halfOfTheCheckPoints[pIndex - 1].x, y = halfOfTheCheckPoints[pIndex - 1].y, radius = 200, planet = halfOfTheCheckPoints[pIndex - 1].planet})
-                                    table.insert(self.homeCheckpoints, #self.homeCheckpoints + 1, {x = pointX, y = pointY, radius = 200, planet = halfOfTheCheckPoints[pIndex].planet})
-                                end
-                            else
-                                table.insert(self.homeCheckpoints, #self.homeCheckpoints + 1, {x = halfOfTheCheckPoints[pIndex - 1].x, y = halfOfTheCheckPoints[pIndex - 1].y, radius = 200, planet = halfOfTheCheckPoints[pIndex - 1].planet})
-                            end
-                        end
-                    end
-
-                    table.insert(self.homeCheckpoints, 1, {x = halfOfTheCheckPoints[1].x, y = halfOfTheCheckPoints[1].y, radius = 200})
-                    table.insert(self.homeCheckpoints, {x = halfOfTheCheckPoints[#halfOfTheCheckPoints].x, y = halfOfTheCheckPoints[#halfOfTheCheckPoints].y, radius = 200, planet = halfOfTheCheckPoints[#halfOfTheCheckPoints].planet})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(50)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(50)) * (self.planet.radius + 200), radius = 150})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(40)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(40)) * (self.planet.radius + 200), radius = 150})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(30)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(30)) * (self.planet.radius + 200), radius = 150})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(20)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(20)) * (self.planet.radius + 200), radius = 150})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(10)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(10)) * (self.planet.radius + 200), radius = 150})
-                    -- table.insert(self.homeCheckpoints, {x = self.planet.x + math.cos(math.rad(0)) * (self.planet.radius + 200), y = self.planet.y - math.sin(math.rad(0)) * (self.planet.radius + 200), radius = 150})
-                end
-
-                for _, checkPoint in ipairs(self.homeCheckpoints) do
-                    checkPoint.x = checkPoint.x + WorldDirection.x
-                    checkPoint.y = checkPoint.y + WorldDirection.y
-                    if checkPoint.planet ~= nil then
-                        checkPoint.x = checkPoint.x + checkPoint.planet.thrust.x * DT
-                        checkPoint.y = checkPoint.y + checkPoint.planet.thrust.y * DT
-                    end
-                end
-
-                if self.docking then
-                    self.targetAngle = calculate.angle(planet.x, planet.y, self.x, self.y) % 360
-                    self.forwardThruster.x = 0
-                    self.forwardThruster.y = 0
-                    
-                    local speed = calculate.distance(self.thrust.x, self.thrust.y)
-                    
-                    if speed > self.dockingVel then
-                        self:onBrakesPressed()
-                    elseif speed < self.dockingVel then
-                        self.reverseThruster.x = self.reverseThruster.x + math.cos(math.rad(self.angle + 90)) * self.reverseThruster.accel
-                        self.reverseThruster.y = self.reverseThruster.y - math.sin(math.rad(self.angle + 90)) * self.reverseThruster.accel
-                    end
                 else
-                    self:releaseReverseThrusters()
-                    self.forwardThruster.x = math.cos(math.rad(self.angle + 90)) * self.forwardThruster.accel
-                    self.forwardThruster.y = -math.sin(math.rad(self.angle + 90)) * self.forwardThruster.accel
+                    self:updateDock(planet)
                 end
             end
         end
@@ -529,7 +509,7 @@ enemies =  {
         enemy.conditionalUpdate = function (self)
             if self.farAway then
                 self.foundPlayer = false
-            else
+            elseif not self.player.gettingDestroyed then
                 self.docking = false
             end
             
@@ -1169,7 +1149,7 @@ enemies =  {
                     self:returnToPlanet(self.player.planet)
                 end
             else
-                if not self.farAway then
+                if not self.farAway and self.character.gettingDestroyed then
                     self.docking = false
                 end
             end
